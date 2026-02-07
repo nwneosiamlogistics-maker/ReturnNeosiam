@@ -1,0 +1,44 @@
+{
+  "name": "returnneosiam-pro",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
+    "firebase": "^12.6.0",
+    "lucide-react": "^0.554.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.5.0",
+    "sweetalert2": "^11.26.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/eslint": "^9.6.1",
+    "@types/exceljs": "^0.5.3",
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^16.5.0",
+    "typescript": "~5.8.2",
+    "typescript-eslint": "^8.50.1",
+    "vite": "^6.2.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@firebase/util",
+      "esbuild",
+      "protobufjs"
+    ]
+  }
+}
