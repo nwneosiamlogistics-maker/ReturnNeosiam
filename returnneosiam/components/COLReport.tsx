@@ -446,7 +446,7 @@ const COLReport: React.FC<COLReportProps> = () => {
           </select>
 
           {/* Actions */}
-          <div className="flex gap-2 ml-2 border-l border-slate-200 pl-4">
+          <div className="flex gap-2 ml-0 md:ml-2 md:border-l md:border-slate-200 md:pl-4">
             <button
               onClick={handleExportExcel}
               className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold p-2 rounded-lg transition-all shadow-md shadow-emerald-200 hover:shadow-lg active:scale-95 flex items-center gap-2"
@@ -605,7 +605,7 @@ const COLReport: React.FC<COLReportProps> = () => {
                                   <div className="text-[9px] text-slate-500 font-medium">Qty: <b>{subItem.quantity} {subItem.unit}</b></div>
 
                                   {/* Mini Actions for Sub-Items */}
-                                  <div className="flex gap-1 mt-1 opacity-0 group-hover/sub:opacity-100 transition-opacity absolute right-0 top-0">
+                                  <div className="flex gap-1 mt-1 md:opacity-0 md:group-hover/sub:opacity-100 transition-opacity absolute right-0 top-0">
                                     <button onClick={() => handleEdit(subItem)} className="p-1 bg-white text-amber-500 rounded border border-slate-200 hover:border-amber-300 shadow-sm" title="Edit">
                                       <Edit className="w-2.5 h-2.5" />
                                     </button>
@@ -741,7 +741,7 @@ const COLReport: React.FC<COLReportProps> = () => {
               </button>
             </div>
 
-            <div className="p-8 overflow-y-auto max-h-[70vh] custom-scrollbar">
+            <div className="p-4 md:p-8 overflow-y-auto max-h-[70vh] custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="col-span-1">
                   <label htmlFor="edit-date" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Date</label>
@@ -830,7 +830,7 @@ const COLReport: React.FC<COLReportProps> = () => {
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1 md:col-span-2">
                   <div className="relative flex py-2 items-center">
                     <div className="flex-grow border-t border-slate-200"></div>
                     <span className="flex-shrink-0 mx-4 text-slate-300 text-xs font-bold uppercase tracking-widest">Product Information</span>
@@ -880,7 +880,7 @@ const COLReport: React.FC<COLReportProps> = () => {
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1 md:col-span-2">
                   <label htmlFor="edit-notes" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Notes</label>
                   <textarea
                     id="edit-notes"
@@ -892,7 +892,7 @@ const COLReport: React.FC<COLReportProps> = () => {
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1 md:col-span-2">
                   <label htmlFor="edit-status" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Status</label>
                   <div className="relative">
                     <select
@@ -918,7 +918,7 @@ const COLReport: React.FC<COLReportProps> = () => {
               </div>
             </div>
 
-            <div className="p-6 border-t border-slate-100 bg-slate-50/80 backdrop-blur-sm flex justify-end gap-3 sticky bottom-0 z-10">
+            <div className="p-4 md:p-6 border-t border-slate-100 bg-slate-50/80 backdrop-blur-sm flex justify-end gap-3 sticky bottom-0 z-10">
               <button
                 onClick={() => setIsEditModalOpen(false)}
                 className="px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-xl transition-all active:scale-95"
