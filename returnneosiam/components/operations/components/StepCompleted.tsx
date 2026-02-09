@@ -46,9 +46,9 @@ export const StepCompleted: React.FC = () => {
     }, [completedItems]);
 
     return (
-        <div className="h-full flex">
+        <div className="h-full flex flex-col md:flex-row">
             {/* Left Sidebar - Item List */}
-            <div className="w-80 border-r border-slate-700 bg-slate-800 flex flex-col">
+            <div className="w-full md:w-80 max-h-[50vh] md:max-h-full border-b md:border-b-0 md:border-r border-slate-700 bg-slate-800 flex flex-col">
                 <div className="p-4 border-b border-slate-700">
                     <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                         <CheckCircle className="w-5 h-5 text-green-500" />
@@ -162,10 +162,10 @@ export const StepCompleted: React.FC = () => {
             </div>
 
             {/* Right Panel - Detail View */}
-            <div className="flex-1 overflow-y-auto bg-slate-900 p-8">
+            <div className="flex-1 overflow-y-auto bg-slate-900 p-4 md:p-8">
                 {selectedItem ? (
                     <div className="max-w-3xl mx-auto space-y-6">
-                        <div className="flex items-center gap-3 mb-6">
+                        <div className="flex flex-wrap items-center gap-3 mb-6">
                             <div className="p-3 bg-green-600 rounded-xl shadow-lg">
                                 <FileCheck className="w-6 h-6 text-white" />
                             </div>
@@ -174,11 +174,11 @@ export const StepCompleted: React.FC = () => {
                                 <p className="text-sm text-slate-400">Completed Item Details</p>
                             </div>
                             {selectedItem.status === 'DirectReturn' ? (
-                                <span className="ml-auto inline-flex items-center gap-1 bg-orange-900/50 text-orange-300 px-3 py-1 rounded-full text-sm font-bold border border-orange-700/50">
+                                <span className="md:ml-auto inline-flex items-center gap-1 bg-orange-900/50 text-orange-300 px-3 py-1 rounded-full text-sm font-bold border border-orange-700/50">
                                     <MapPin className="w-4 h-4" /> Direct Return
                                 </span>
                             ) : (
-                                <span className="ml-auto inline-flex items-center gap-1 bg-green-900/50 text-green-300 px-3 py-1 rounded-full text-sm font-bold border border-green-700/50">
+                                <span className="md:ml-auto inline-flex items-center gap-1 bg-green-900/50 text-green-300 px-3 py-1 rounded-full text-sm font-bold border border-green-700/50">
                                     <CheckCircle className="w-4 h-4" /> Completed
                                 </span>
                             )}
@@ -207,7 +207,7 @@ export const StepCompleted: React.FC = () => {
                                 <h3 className="font-bold text-slate-100 text-lg">{selectedItem.productName}</h3>
                                 <div className="text-sm text-slate-400">{selectedItem.productCode}</div>
                                 
-                                <div className="grid grid-cols-4 gap-4 pt-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
                                     <div className="bg-slate-700/50 p-3 rounded-lg text-center border border-slate-700">
                                         <span className="text-slate-400 text-xs block mb-1">จำนวน</span>
                                         <span className="font-bold text-lg text-green-400">{selectedItem.quantity}</span>

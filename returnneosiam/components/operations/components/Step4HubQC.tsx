@@ -296,9 +296,9 @@ export const Step4HubQC: React.FC = () => {
     };
 
     return (
-        <div className="h-full flex">
+        <div className="h-full flex flex-col md:flex-row">
             {/* Sidebar List */}
-            <div className="w-80 border-r border-slate-700 bg-slate-800 flex flex-col">
+            <div className="w-full md:w-80 max-h-[50vh] md:max-h-full border-b md:border-b-0 md:border-r border-slate-700 bg-slate-800 flex flex-col">
                 <div className="p-4 border-b border-slate-700 font-bold text-slate-200 flex justify-between items-center">
                     <span>คิวรอตรวจสอบ ({receivedItems.length})</span>
                     <Activity className="w-4 h-4 text-blue-400" />
@@ -414,7 +414,7 @@ export const Step4HubQC: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 bg-slate-900">
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-900">
                 {
                     qcSelectedItem ? (
                         <div className="max-w-3xl mx-auto space-y-6" >
@@ -498,7 +498,7 @@ export const Step4HubQC: React.FC = () => {
                                 {/* Grading Section */}
                                 <div className="mb-8">
                                     <h4 className="text-sm font-bold text-slate-200 mb-3 uppercase tracking-wider">1. ประเมินสภาพ (Grading)</h4>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <div className="text-xs font-bold text-green-400 bg-green-900/30 p-1.5 rounded w-fit mb-2">Good (สภาพดี)</div>
                                             <div className="grid grid-cols-2 gap-2">
@@ -531,7 +531,7 @@ export const Step4HubQC: React.FC = () => {
                                 {/* Disposition Section */}
                                 <div>
                                     <h4 className="text-sm font-bold text-slate-200 mb-3 uppercase tracking-wider">2. ตัดสินใจ (Disposition)</h4>
-                                    <div className="grid grid-cols-5 gap-2 mb-4">
+                                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
                                         {Object.keys(dispositionLabels).map(key => (
                                             <button key={key} onClick={() => { setSelectedDisposition(key as DispositionAction); setIsCustomRoute(false); }} className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${selectedDisposition === key ? 'bg-blue-600 text-white border-blue-700 shadow-md' : 'bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600'}`}>
                                                 <Truck className="w-5 h-5 mb-1" />
@@ -562,7 +562,7 @@ export const Step4HubQC: React.FC = () => {
                                         </div>
                                     )}
                                     {selectedDisposition === 'Restock' && (
-                                        <div className="bg-green-900/30 p-4 rounded-lg border border-green-700/50 animate-fade-in grid grid-cols-2 gap-4">
+                                        <div className="bg-green-900/30 p-4 rounded-lg border border-green-700/50 animate-fade-in grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div><label className="block text-xs font-bold text-green-300 mb-1">ชื่อผู้ซื้อ (Buyer Name)</label><input type="text" aria-label="ชื่อผู้ซื้อ" title="ชื่อผู้ซื้อ" className="w-full p-2 border border-slate-600 rounded text-sm text-slate-200 bg-slate-700 placeholder-slate-400 focus:ring-1 focus:ring-green-500 outline-none" value={dispositionDetails.sellerName} onChange={e => handleDispositionDetailChange('sellerName', e.target.value)} /></div>
                                             <div><label className="block text-xs font-bold text-green-300 mb-1">เบอร์โทรติดต่อ</label><input type="text" aria-label="เบอร์โทรติดต่อ" title="เบอร์โทรติดต่อ" className="w-full p-2 border border-slate-600 rounded text-sm text-slate-200 bg-slate-700 placeholder-slate-400 focus:ring-1 focus:ring-green-500 outline-none" value={dispositionDetails.contactPhone} onChange={e => handleDispositionDetailChange('contactPhone', e.target.value)} /></div>
                                         </div>
@@ -576,7 +576,7 @@ export const Step4HubQC: React.FC = () => {
                                     {selectedDisposition === 'Claim' && (
                                         <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-700/50 animate-fade-in space-y-3">
                                             <div><label className="block text-xs font-bold text-blue-300 mb-1">ชื่อบริษัทประกัน (Insurance Company)</label><input type="text" aria-label="ชื่อบริษัทประกัน" title="ชื่อบริษัทประกัน" className="w-full p-2 border border-slate-600 rounded text-sm text-slate-200 bg-slate-700 placeholder-slate-400 focus:ring-1 focus:ring-blue-500 outline-none" value={dispositionDetails.claimCompany} onChange={e => handleDispositionDetailChange('claimCompany', e.target.value)} /></div>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                 <div><label className="block text-xs font-bold text-blue-300 mb-1">ผู้ประสานงาน</label><input type="text" aria-label="ผู้ประสานงาน" title="ผู้ประสานงาน" className="w-full p-2 border border-slate-600 rounded text-sm text-slate-200 bg-slate-700 placeholder-slate-400 focus:ring-1 focus:ring-blue-500 outline-none" value={dispositionDetails.claimCoordinator} onChange={e => handleDispositionDetailChange('claimCoordinator', e.target.value)} /></div>
                                                 <div><label className="block text-xs font-bold text-blue-300 mb-1">เบอร์โทร</label><input type="text" aria-label="เบอร์โทร" title="เบอร์โทร" className="w-full p-2 border border-slate-600 rounded text-sm text-slate-200 bg-slate-700 placeholder-slate-400 focus:ring-1 focus:ring-blue-500 outline-none" value={dispositionDetails.claimPhone} onChange={e => handleDispositionDetailChange('claimPhone', e.target.value)} /></div>
                                             </div>
@@ -735,7 +735,7 @@ export const Step4HubQC: React.FC = () => {
                                     )}
                                 </div>
 
-                                <div className="mt-4 flex justify-end pt-6 border-t border-slate-700">
+                                <div className="mt-4 flex flex-wrap justify-end gap-3 pt-6 border-t border-slate-700">
                                     {showSplitMode ? (
                                         <button onClick={handleSplitSubmit} aria-label="ยืนยันการแยกรายการ" title="ยืนยันการแยกรายการ" disabled={isSubmitting || splitQty <= 0 || splitQty >= (isBreakdownUnit ? (qcSelectedItem.quantity * conversionRate) : qcSelectedItem.quantity) || !selectedDisposition} className="px-8 py-3 rounded-lg bg-orange-600 text-white font-bold hover:bg-orange-700 shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait">
                                             {isSubmitting ? (
