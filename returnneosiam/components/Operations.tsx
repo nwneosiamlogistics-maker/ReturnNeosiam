@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
   Menu, Truck, Activity,
-  FileText, LayoutGrid, CheckCircle, ShieldCheck
+  FileText, LayoutGrid, CheckCircle, ShieldCheck,
+  ClipboardList, FileInput
 } from 'lucide-react';
 import { useOperationsLogic } from './operations/hooks/useOperationsLogic';
-// import { Step1Request } from './operations/components/Step1Request'; // Hidden: Use NCR System instead
+import { Step1LogisticsRequest } from './operations/components/Step1LogisticsRequest';
 import { Step2JobAccept } from './operations/components/Step2JobAccept';
 import { Step3BranchReceive } from './operations/components/Step3BranchReceive';
 import { Step4Consolidation } from './operations/components/Step4Consolidation';
@@ -37,14 +38,11 @@ export const Operations: React.FC<OperationsProps> = ({ initialData, onClearInit
 
   // New Menu Structure mapping to the Flowchart
   const MENU_ITEMS = [
-    // --- SHARED --- Hidden: Use NCR System (standalone) instead
-    // { id: 1, label: '1. แจ้งคืนสินค้า (Return Request)', icon: FileInput, count: undefined, color: 'text-blue-600', group: 'Return Request' },
-
-    // --- ORANGE FLOW (Inbound Logistics) ---
-    // --- ORANGE FLOW (Inbound Logistics) - Removed per user request
-    // { id: 12, label: '2. รับงาน (Receive Job)', icon: ClipboardList, count: derived.step2Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL ID)' },
-    // { id: 13, label: '3. รับสินค้า (Physical Receive)', icon: Activity, count: derived.step3Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL ID)' },
-    // { id: 14, label: '4. รวมสินค้า (Branch Consolidation)', icon: LayoutGrid, count: derived.step4Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL ID)' },
+    // --- ORANGE FLOW (Inbound Logistics / COL) ---
+    { id: 1, label: '1. ใบสั่งงานรับกลับ (Import Excel)', icon: FileInput, count: undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
+    { id: 12, label: '2. รับงาน (Receive Job)', icon: ClipboardList, count: derived.step2Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
+    { id: 13, label: '3. รับสินค้า (Physical Receive)', icon: Activity, count: derived.step3Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
+    { id: 14, label: '4. รวมสินค้า (Branch Consolidation)', icon: LayoutGrid, count: derived.step4Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
 
 
     // --- BLUE FLOW (NCR System) ---
@@ -58,28 +56,19 @@ export const Operations: React.FC<OperationsProps> = ({ initialData, onClearInit
 
   const renderContent = () => {
     switch (state.activeStep) {
-      // --- Shared Step 1 --- Hidden: Use NCR System (standalone) instead
-      // case 1:
-      //   return (
-      //     <Step1Request
-      //       formData={state.formData}
-      //       requestItems={state.requestItems}
-      //       isCustomBranch={state.isCustomBranch}
-      //       uniqueCustomers={derived.uniqueCustomers}
-      //       uniqueDestinations={derived.uniqueDestinations}
-      //       uniqueFounders={derived.uniqueFounders}
-      //       uniqueProductCodes={derived.uniqueProductCodes}
-      //       uniqueProductNames={derived.uniqueProductNames}
-      //       setFormData={actions.setFormData}
-      //       setRequestItems={actions.setRequestItems}
-      //       setIsCustomBranch={actions.setIsCustomBranch}
-      //       handleImageUpload={actions.handleImageUpload}
-      //       handleRemoveImage={actions.handleRemoveImage}
-      //       handleAddItem={actions.handleAddItem}
-      //       handleRemoveItem={actions.handleRemoveItem}
-      //       handleRequestSubmit={actions.handleRequestSubmit}
-      //     />
-      //   );
+      // --- Orange Flow Step 1: Import Excel / Create Return Request ---
+      case 1:
+        return (
+          <Step1LogisticsRequest
+            formData={state.formData}
+            requestItems={state.requestItems}
+            setFormData={actions.setFormData}
+            handleRequestSubmit={actions.handleRequestSubmit}
+            uniqueCustomers={derived.uniqueCustomers}
+            uniqueDestinations={derived.uniqueDestinations}
+            existingItems={derived.requestedItems}
+          />
+        );
 
       // --- Orange Flow Steps ---
       case 12: return <Step2JobAccept />;
@@ -152,7 +141,7 @@ export const Operations: React.FC<OperationsProps> = ({ initialData, onClearInit
         </div>
 
         <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-6 scrollbar-thin scrollbar-thumb-slate-700">
-          {['Return Request', 'NCR Hub'].map((group) => {
+          {['Inbound Logistics (COL)', 'NCR Hub'].map((group) => {
             const items = MENU_ITEMS.filter(i => i.group === group);
             if (items.length === 0) return null;
             return (
@@ -165,7 +154,9 @@ export const Operations: React.FC<OperationsProps> = ({ initialData, onClearInit
                       onClick={() => actions.setActiveStep(item.id)}
                       className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden
                           ${state.activeStep === item.id
-                          ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-900/40 translate-x-1'
+                          ? (group === 'Inbound Logistics (COL)'
+                            ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-900/40 translate-x-1'
+                            : 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-900/40 translate-x-1')
                           : 'text-white/90 hover:bg-white/5 hover:text-white'
                         }`}
                     >

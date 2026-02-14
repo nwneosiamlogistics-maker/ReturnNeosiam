@@ -153,25 +153,26 @@ export default function NCRSystem() {
     };
 
     const [uploadingImages, setUploadingImages] = useState(false);
+    const [pendingImageFiles, setPendingImageFiles] = useState<File[]>([]);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             const files = Array.from(e.target.files) as File[];
-            setUploadingImages(true);
-            try {
-                setNASUploadContext(formData.ncrNumber || '', 'ncr');
-                const urls = await uploadImagesToStorage(files, 'ncr-images');
-                setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...urls] }));
-            } catch (error) {
-                console.error('Image upload failed:', error);
-                Swal.fire('อัปโหลดรูปไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง', 'error');
-            } finally {
-                setUploadingImages(false);
-            }
+            setPendingImageFiles(prev => [...prev, ...files]);
+            const previewUrls = files.map(f => URL.createObjectURL(f));
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...previewUrls] }));
         }
     };
 
     const handleRemoveImage = (index: number) => {
+        const currentImages = formData.images || [];
+        const removedUrl = currentImages[index];
+        if (removedUrl?.startsWith('blob:')) {
+            URL.revokeObjectURL(removedUrl);
+            const blobImages = currentImages.filter(u => u.startsWith('blob:'));
+            const blobIndex = blobImages.indexOf(removedUrl);
+            if (blobIndex >= 0) setPendingImageFiles(prev => prev.filter((_, i) => i !== blobIndex));
+        }
         setFormData(prev => ({ ...prev, images: (prev.images || []).filter((_, i) => i !== index) }));
     };
 
@@ -327,6 +328,25 @@ export default function NCRSystem() {
         if (newNcrNo.includes('ERR')) {
             setSaveResult({ success: false, message: "สร้างเลขที่ NCR ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
             setShowResultModal(true); return;
+        }
+
+        // Upload pending images to NAS with NCR folder name (e.g. ncr/NCR-2026-0147/)
+        if (pendingImageFiles.length > 0) {
+            try {
+                setUploadingImages(true);
+                setNASUploadContext(newNcrNo, 'ncr');
+                const uploadedUrls = await uploadImagesToStorage(pendingImageFiles, 'ncr-images');
+                const oldImages = formData.images || [];
+                const nonBlobImages = oldImages.filter(u => !u.startsWith('blob:'));
+                formData.images = [...nonBlobImages, ...uploadedUrls];
+                oldImages.filter(u => u.startsWith('blob:')).forEach(u => URL.revokeObjectURL(u));
+                setPendingImageFiles([]);
+                console.log(`📷 Uploaded ${uploadedUrls.length} images to NAS folder: ncr/${newNcrNo}/`);
+            } catch (err) {
+                console.error('📷 Image upload during save failed:', err);
+            } finally {
+                setUploadingImages(false);
+            }
         }
 
         let successCount = 0;
@@ -531,6 +551,7 @@ ${formatDamageSummary({
     causeOperation: formData.causeOperation, causeEnv: formData.causeEnv,
     causeDetail: formData.causeDetail, preventionDetail: formData.preventionDetail,
 } as Partial<ReturnRecord> as ReturnRecord)}
+${formData.images && formData.images.length > 0 ? `\n📷 <b>รูปภาพแนบ (${formData.images.length} รูป)</b>\n${formData.images.map((url, i) => `${i + 1}. <a href="${url}">รูปที่ ${i + 1}</a>`).join('\n')}` : ''}
 ----------------------------------
 🔗 <i>Status: ${formData.isRecordOnly ? 'Closed/Completed' : 'Open'}</i>`;
 
