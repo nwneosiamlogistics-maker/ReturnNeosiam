@@ -208,6 +208,7 @@ export enum AppView {
   INVENTORY = 'INVENTORY',
   COLLECTION = 'COLLECTION',
   COL_REPORT = 'COL_REPORT',
+  OKR = 'OKR',
   SETTINGS = 'SETTINGS'
 }
 
@@ -536,6 +537,13 @@ export interface TelegramConfig {
   enabled: boolean;
 }
 
+export interface NASConfig {
+  apiUrl: string;       // e.g. https://neosiam.dscloud.biz/api/upload.php
+  apiKey: string;       // API Key for authentication
+  enabled: boolean;
+}
+
 export interface SystemConfig {
   telegram?: TelegramConfig;
+  nas?: NASConfig;
 }

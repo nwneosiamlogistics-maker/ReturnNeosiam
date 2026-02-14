@@ -244,7 +244,7 @@ export const Step1Request: React.FC<Step1RequestProps> = ({
     };
 
     return (
-        <div className="h-full flex">
+        <div className="h-full flex flex-col md:flex-row">
             <PreliminaryDecisionModal
                 isOpen={showDecisionModal}
                 onClose={() => setShowDecisionModal(false)}
@@ -252,7 +252,7 @@ export const Step1Request: React.FC<Step1RequestProps> = ({
             />
 
             {/* Left Sidebar */}
-            <div className="w-80 border-r border-slate-700 bg-slate-800 flex flex-col">
+            <div className="w-full md:w-80 max-h-[50vh] md:max-h-full border-b md:border-b-0 md:border-r border-slate-700 bg-slate-800 flex flex-col">
                 <div className="p-4 border-b border-slate-700 font-bold text-slate-200 flex justify-between items-center">
                     <span>รายการสินค้า ({requestItems.length})</span>
                     <FileText className="w-4 h-4 text-indigo-400" />
@@ -384,7 +384,7 @@ export const Step1Request: React.FC<Step1RequestProps> = ({
             </div>
 
             {/* Right Panel */}
-            <div className="flex-1 overflow-y-auto bg-slate-900 p-8">
+            <div className="flex-1 overflow-y-auto bg-slate-900 p-4 md:p-8">
                 {selectedItemIndex === null ? (
                     <div className="max-w-4xl mx-auto space-y-6">
                         <div className="flex items-center gap-3 mb-6">

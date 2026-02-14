@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { db } from './firebase';
 import { ref, onValue, set, update, remove, runTransaction } from 'firebase/database';
 import { ReturnRecord, NCRRecord, SystemConfig } from './types';
+import { setNASConfig } from './utils/imageUpload';
 import Swal from 'sweetalert2';
 
 // Types moved to types.ts
@@ -13,6 +14,8 @@ interface DataContextType {
   items: ReturnRecord[];
   ncrReports: NCRRecord[];
   loading: boolean;
+  dataRangeDays: number;
+  setDataRangeDays: (days: number) => void;
   addReturnRecord: (item: ReturnRecord) => Promise<boolean>;
   updateReturnRecord: (id: string, data: Partial<ReturnRecord>) => Promise<boolean>;
   deleteReturnRecord: (id: string) => Promise<boolean>;
@@ -22,15 +25,20 @@ interface DataContextType {
   systemConfig: SystemConfig;
   updateSystemConfig: (config: Partial<SystemConfig>) => Promise<boolean>;
   getNextNCRNumber: () => Promise<string>;
+  rollbackNCRNumber: () => Promise<void>;
   getNextReturnNumber: () => Promise<string>;
   getNextCollectionNumber: () => Promise<string>;
+  rollbackCollectionNumber: () => Promise<void>;
   runDataIntegrityCheck: () => Promise<number>;
+  repairMissingReturnRecords: () => Promise<number>;
 }
 
 const DataContext = createContext<DataContextType>({
   items: [],
   ncrReports: [],
   loading: true,
+  dataRangeDays: 30,
+  setDataRangeDays: () => {},
   addReturnRecord: async () => false,
   updateReturnRecord: async () => false,
   deleteReturnRecord: async () => false,
@@ -40,9 +48,12 @@ const DataContext = createContext<DataContextType>({
   systemConfig: {},
   updateSystemConfig: async () => false,
   getNextNCRNumber: async () => 'NCR-ERROR-0000',
+  rollbackNCRNumber: async () => {},
   getNextReturnNumber: async () => 'RT-ERROR-0000',
   getNextCollectionNumber: async () => 'COL-ERROR-0000',
+  rollbackCollectionNumber: async () => {},
   runDataIntegrityCheck: async () => 0,
+  repairMissingReturnRecords: async () => 0,
 });
 
 export const useData = () => useContext(DataContext);
@@ -58,6 +69,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
   const [loading, setLoading] = useState(true);
+  const [dataRangeDays, setDataRangeDays] = useState(30);
 
   useEffect(() => {
     console.log("🔄 Connecting to Realtime Database...");
@@ -118,20 +130,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const ncrRef = ref(db, 'ncr_reports');
     const unsubNCR = onValue(ncrRef, (snapshot) => {
       const data = snapshot.val();
-      // FIX: Add robust filtering for NCR reports as well
-      const loadedReports = data
-        ? (Object.entries(data) as [string, Record<string, unknown>][])
-          .map(([key, value]) => {
-            // 1. Ensure object structure
-            if (!value || typeof value !== 'object') return null;
+      const rawEntries = data ? Object.entries(data) : [];
+      const rawCount = rawEntries.length;
 
-            // 2. Ensure ID exists (use Firebase Key if internal ID is missing)
+      const loadedReports = data
+        ? (rawEntries as [string, Record<string, unknown>][])
+          .map(([key, value]) => {
+            if (!value || typeof value !== 'object') return null;
             const report = {
               ...value,
               id: (typeof value.id === 'string' && value.id) ? value.id : key
             };
-
-            // 3. Apply Robust Defaults for other fields
             const fullReport = report as Record<string, unknown>;
             return {
               ...fullReport,
@@ -140,48 +149,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
           })
           .filter((report): report is NCRRecord => {
-            if (!report) return false; // Filter out nulls from non-object values
+            if (!report) return false;
             const r = report as Record<string, unknown>;
-
-            // DEBUG: Check for specific missing NCR
-            if (r.ncrNo === 'NCR-2025-0163' || r.id === 'NCR-2025-0163') {
-              console.log("🔍 Checking NCR-2025-0163 in DataContext filter:", r);
-            }
-
             if (!r || typeof r !== 'object') return false;
-
-            // Header checks - ID is MUST
-            if (typeof r.id !== 'string') {
-              console.warn("🛡️ Data Hardening: Filtering out invalid NCR (missing id).", report);
-              return false;
-            }
-
-            // Date and Status are now defaulted above, so just check type safety
-            if (typeof r.date !== 'string' || typeof r.status !== 'string') {
-              // Should not happen due to defaults, but catch-all
-              console.warn("🛡️ Data Hardening: NCR date/status invalid type.", report);
-              return false;
-            }
-
-            // Item checks (handle both nested and potential flat structures for backward compat)
-            const itemData = (r.item as Record<string, unknown>) || r;
-            if (!itemData || typeof itemData !== 'object') {
-              console.warn("🛡️ Data Hardening: Invalid NCR Item structure.", report);
-              return false;
-            }
-
-            // Relaxed check: Log warning but allow if product name is missing/invalid type
-            if (typeof itemData.productName !== 'string') {
-              console.warn("⚠️ Data Warning: NCR report missing valid productName.", report);
-              // Do not return false; attempt to display it anyway
-            }
-
+            if (typeof r.id !== 'string') return false;
+            if (typeof r.date !== 'string' || typeof r.status !== 'string') return false;
             return true;
           })
         : [];
 
       setNcrReports(loadedReports.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      console.log(`✅ RTDB Connected: Loaded ${loadedReports.length} valid NCR Reports`);
+      const filteredOut = rawCount - loadedReports.length;
+      console.log(`✅ RTDB: NCR raw=${rawCount}, valid=${loadedReports.length}, filtered_out=${filteredOut}`);
     }, (error) => {
       console.warn("⚠️ RTDB Permission/Connection Error (NCR).", error.message);
       setNcrReports([]);
@@ -198,8 +177,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           telegram: {
             ...prev.telegram,
             ...(data.telegram || {})
+          },
+          nas: {
+            ...prev.nas,
+            ...(data.nas || {})
           }
         }));
+        // Sync NAS config to imageUpload utility
+        if (data.nas) setNASConfig(data.nas);
       }
     });
 
@@ -214,11 +199,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // IRON RULE: Unique Document Number (R No) Logic
     // 1. "R 1 number can have products > 1": Allowed Same R + Diff Product.
     // 2. "Forbidden if Step 2+": If R exists in Step 2 onwards, cannot add new items to it.
+    // BYPASS: NCR-created records skip duplicate check (NCR System handles its own dedup)
+
+    const isFromNCR = item.documentType === 'NCR' || !!item.ncrNumber;
 
     const docNo = (item.documentNo || item.refNo || '').trim();
     const productKey = (item.productCode || item.productName || '').trim();
 
-    if (docNo) {
+    if (docNo && !isFromNCR) {
       const targetDocLower = docNo.toLowerCase();
       const targetProdLower = productKey.toLowerCase();
 
@@ -286,14 +274,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
+      console.log(`📝 Writing ReturnRecord: ${item.id} (ncr: ${item.ncrNumber || 'N/A'})`);
       await set(ref(db, 'return_records/' + item.id), item);
+      console.log(`✅ ReturnRecord saved: ${item.id}`);
       return true;
     } catch (error: unknown) {
       if ((error as { code: string }).code === 'PERMISSION_DENIED') {
-        console.warn("⚠️ Write Permission Denied: Cannot save return record.");
-        alert("Access Denied: Check Firebase Realtime Database Rules. Developer tip: Set rules to 'allow read, write: if true;' for testing.");
+        console.error("⚠️ Write Permission Denied: Cannot save return record.");
+        alert("Access Denied: Check Firebase Realtime Database Rules.");
       } else {
-        console.error("Error adding return record:", error);
+        console.error(`❌ ReturnRecord save FAILED (ID: ${item.id}):`, error);
         alert("Failed to save record.");
       }
       return false;
@@ -381,22 +371,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addNCRReport = async (item: NCRRecord): Promise<boolean> => {
     // 🛡️ Guard: Critical ID check
     if (!item.id) {
-      console.error("❌ CRTICAL: Attempted to add NCR without ID.", item);
+      console.error("❌ CRITICAL: Attempted to add NCR without ID.", item);
       alert("System Error: NCR ID is missing. Cannot save data. Please contact support.");
       return false;
     }
 
+    // 🛡️ Guard: Online check
+    if (!navigator.onLine) {
+      console.error("❌ OFFLINE: Cannot save NCR report while offline.");
+      return false;
+    }
+
     try {
+      console.log(`📝 Writing NCR: ${item.id} (ncrNo: ${item.ncrNo})`);
       await set(ref(db, 'ncr_reports/' + item.id), item);
+      console.log(`✅ NCR saved successfully: ${item.id}`);
       return true;
     } catch (error: unknown) {
-      if ((error as { code: string }).code === 'PERMISSION_DENIED') {
-        console.warn("⚠️ Write Permission Denied: Cannot save NCR report.");
-        alert("Access Denied: Check Firebase Realtime Database Rules. Developer tip: Set rules to 'allow read, write: if true;' for testing.");
-      } else {
-        console.error("Error adding NCR report:", error);
-        alert(`Failed to save NCR report (ID: ${item.id}). Check console for details.`);
+      const errCode = (error as { code?: string }).code;
+      const errMsg = (error as { message?: string }).message;
+
+      if (errCode === 'PERMISSION_DENIED') {
+        console.error("⚠️ Write Permission Denied: Cannot save NCR report.");
+        alert("Access Denied: ไม่มีสิทธิ์บันทึกข้อมูล กรุณาติดต่อผู้ดูแลระบบ");
+        return false;
       }
+
+      console.error(`❌ NCR save FAILED (ID: ${item.id}):`, errMsg || error);
       return false;
     }
   };
@@ -575,6 +576,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const rollbackNCRNumber = async (): Promise<void> => {
+    const counterRef = ref(db, 'counters/ncr_counter');
+    try {
+      await runTransaction(counterRef, (currentData) => {
+        if (currentData && currentData.lastNumber > 0) {
+          currentData.lastNumber--;
+        }
+        return currentData;
+      });
+      console.log('✅ NCR counter rolled back successfully.');
+    } catch (error) {
+      console.error('❌ Failed to rollback NCR counter:', error);
+    }
+  };
+
   const getNextReturnNumber = async (): Promise<string> => {
     const counterRef = ref(db, 'counters/return_counter');
     const currentYear = new Date().getFullYear();
@@ -603,6 +619,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error("Error getting next Return number:", error);
       return `RT-${currentYear}-ERR${Math.floor(Math.random() * 100)}`;
+    }
+  };
+
+  const rollbackCollectionNumber = async (): Promise<void> => {
+    const counterRef = ref(db, 'counters/collection_counter');
+    try {
+      await runTransaction(counterRef, (currentData) => {
+        if (currentData && currentData.lastNumber > 0) {
+          currentData.lastNumber--;
+        }
+        return currentData;
+      });
+      console.log('✅ Collection counter rolled back successfully.');
+    } catch (error) {
+      console.error('❌ Failed to rollback Collection counter:', error);
     }
   };
 
@@ -699,6 +730,110 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return deletedCount;
   };
 
+  const repairMissingReturnRecords = async (): Promise<number> => {
+    console.log("🔧 Starting NCR → ReturnRecord Repair...");
+
+    const existingNcrNumbers = new Set(items.map(i => i.ncrNumber).filter(Boolean));
+    const activeNCRs = ncrReports.filter(n =>
+      n.status !== 'Canceled' &&
+      n.ncrNo &&
+      !existingNcrNumbers.has(n.ncrNo)
+    );
+
+    // For each missing NCR, gather ALL items under that ncrNo
+    const groupedByNcrNo: Record<string, NCRRecord[]> = {};
+    activeNCRs.forEach(n => {
+      const key = n.ncrNo!;
+      if (!groupedByNcrNo[key]) groupedByNcrNo[key] = [];
+      groupedByNcrNo[key].push(n);
+    });
+
+    if (Object.keys(groupedByNcrNo).length === 0) {
+      console.log("✅ No missing ReturnRecords found.");
+      return 0;
+    }
+
+    console.log(`🔧 Found ${activeNCRs.length} NCR items across ${Object.keys(groupedByNcrNo).length} NCR numbers needing repair.`);
+
+    let repairedCount = 0;
+    for (const [ncrNo, ncrItems] of Object.entries(groupedByNcrNo)) {
+      for (const ncr of ncrItems) {
+        const ncrAny = ncr as unknown as Record<string, unknown>;
+        const itemData = (ncr.item ? (ncr.item as unknown as Record<string, unknown>) : ncrAny);
+        const isSettled = !!ncrAny.isFieldSettled;
+        const isRecordOnly = !!ncr.isRecordOnly;
+
+        const rtId = `RT-${new Date().getFullYear()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const returnRecord: ReturnRecord = {
+          id: rtId,
+          refNo: (itemData.refNo as string) || (ncrAny.poNo as string) || '-',
+          date: ncr.date || new Date().toISOString().split('T')[0],
+          dateRequested: ncr.date || new Date().toISOString().split('T')[0],
+          productName: (itemData.productName as string) || 'Unknown',
+          productCode: (itemData.productCode as string) || 'N/A',
+          quantity: (itemData.quantity as number) || 1,
+          unit: (itemData.unit as string) || 'Unit',
+          customerName: (itemData.customerName as string) || 'Unknown',
+          destinationCustomer: (itemData.destinationCustomer as string) || '',
+          branch: (itemData.branch as string) || 'Head Office',
+          category: 'General',
+          ncrNumber: ncrNo,
+          documentType: 'NCR',
+          founder: ncr.founder || '',
+          status: isSettled ? 'Settled_OnField' : (isRecordOnly ? 'Completed' : 'Requested'),
+          isRecordOnly: isRecordOnly,
+          disposition: isRecordOnly ? 'InternalUse' : 'Pending',
+          condition: isRecordOnly ? 'New' : 'Unknown',
+          isFieldSettled: isSettled,
+          preliminaryRoute: (ncrAny.preliminaryRoute as string) || 'Other',
+          reason: `NCR: ${ncr.problemDetail || '-'}`,
+          amount: (itemData.priceBill as number) || 0,
+          priceBill: (itemData.priceBill as number) || 0,
+          pricePerUnit: (itemData.pricePerUnit as number) || 0,
+          priceSell: (itemData.priceSell as number) || 0,
+          neoRefNo: (itemData.neoRefNo as string) || '-',
+          problemSource: ((ncrAny.problemSource as string) || 'Customer') as ReturnRecord['problemSource'],
+          problemAnalysis: ((ncrAny.problemAnalysis as string) || 'Customer') as ReturnRecord['problemAnalysis'],
+          problemDetail: ncr.problemDetail || '',
+          hasCost: !!ncrAny.hasCost,
+          costAmount: (ncrAny.costAmount as number) || 0,
+          costResponsible: (ncrAny.costResponsible as string) || '',
+          rootCause: (ncrAny.problemSource as string) || 'NCR',
+          problemDamaged: ncr.problemDamaged,
+          problemIncomplete: ncr.problemIncomplete,
+          problemOver: ncr.problemOver,
+          problemMixed: ncr.problemMixed,
+          problemWrong: ncr.problemWrong,
+          problemWrongInv: ncr.problemWrongInv,
+          problemWrongInfo: ncr.problemWrongInfo,
+          problemLate: ncr.problemLate,
+          problemDuplicate: ncr.problemDuplicate,
+          problemShortExpiry: ncr.problemShortExpiry,
+          problemTransportDamage: ncr.problemTransportDamage,
+          problemDamagedInBox: ncr.problemDamagedInBox,
+          problemLost: ncr.problemLost,
+          problemAccident: ncr.problemAccident,
+          problemPOExpired: ncr.problemPOExpired,
+          problemNoBarcode: ncr.problemNoBarcode,
+          problemNotOrdered: ncr.problemNotOrdered,
+          problemOther: ncr.problemOther,
+          problemOtherText: ncr.problemOtherText,
+        };
+
+        try {
+          await set(ref(db, 'return_records/' + rtId), returnRecord);
+          repairedCount++;
+          console.log(`  ✅ Repaired: ${ncrNo} → ${rtId}`);
+        } catch (e) {
+          console.error(`  ❌ Failed to repair ${ncrNo}:`, e);
+        }
+      }
+    }
+
+    console.log(`🔧 Repair Complete: ${repairedCount} ReturnRecords created.`);
+    return repairedCount;
+  };
+
   const updateSystemConfig = async (config: Partial<SystemConfig>): Promise<boolean> => {
     try {
       await update(ref(db, 'system_config'), config);
@@ -711,9 +846,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <DataContext.Provider value={{
-      items, ncrReports, loading, systemConfig, addReturnRecord, updateReturnRecord, deleteReturnRecord,
-      addNCRReport, updateNCRReport, deleteNCRReport, getNextNCRNumber, getNextReturnNumber, getNextCollectionNumber,
-      runDataIntegrityCheck, updateSystemConfig
+      items, ncrReports, loading, dataRangeDays, setDataRangeDays, systemConfig, addReturnRecord, updateReturnRecord, deleteReturnRecord,
+      addNCRReport, updateNCRReport, deleteNCRReport, getNextNCRNumber, rollbackNCRNumber, getNextReturnNumber, getNextCollectionNumber, rollbackCollectionNumber,
+      runDataIntegrityCheck, repairMissingReturnRecords, updateSystemConfig
     }}>
       {children}
     </DataContext.Provider>

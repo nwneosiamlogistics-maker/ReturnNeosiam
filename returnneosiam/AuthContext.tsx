@@ -13,18 +13,20 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<User | null>(() => {
+        try {
+            const saved = localStorage.getItem('neosiam_user');
+            return saved ? JSON.parse(saved) : null;
+        } catch { return null; }
+    });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // ไม่เก็บ session ใน localStorage
-        // เมื่อ refresh หน้า user จะเป็น null และต้อง login ใหม่
         setLoading(false);
 
-        // Firebase Auth listener (for future Firebase integration)
+        // Firebase Auth listener
         const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
             if (firebaseUser) {
-                // If Firebase user exists, map to ADMIN
                 const role: UserRole = 'ADMIN';
                 const mappedUser: User = {
                     uid: firebaseUser.uid,
@@ -34,6 +36,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     photoURL: firebaseUser.photoURL || undefined
                 };
                 setUser(mappedUser);
+                localStorage.setItem('neosiam_user', JSON.stringify(mappedUser));
             }
         });
 
@@ -41,14 +44,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, []);
 
     const login = async (userData: User) => {
-        // Save user to state only (NOT in localStorage)
-        // เมื่อ refresh user จะหายไป
         setUser(userData);
+        localStorage.setItem('neosiam_user', JSON.stringify(userData));
     };
 
     const logout = async () => {
         await signOut(auth).catch((err) => console.error("Firebase Signout Error", err));
         setUser(null);
+        localStorage.removeItem('neosiam_user');
     };
 
     return (

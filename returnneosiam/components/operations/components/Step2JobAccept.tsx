@@ -12,7 +12,7 @@ interface Step2JobAcceptProps {
 }
 
 export const Step2JobAccept: React.FC<Step2JobAcceptProps> = ({ onComplete }) => {
-    const { items, updateReturnRecord, deleteReturnRecord, getNextCollectionNumber } = useData();
+    const { items, updateReturnRecord, deleteReturnRecord, getNextCollectionNumber, rollbackCollectionNumber } = useData();
 
     const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -190,10 +190,11 @@ export const Step2JobAccept: React.FC<Step2JobAcceptProps> = ({ onComplete }) =>
                 }
             } catch (error) {
                 console.error('Error creating job:', error);
+                await rollbackCollectionNumber();
                 Swal.fire({
                     icon: 'error',
                     title: 'เกิดข้อผิดพลาด',
-                    text: 'ไม่สามารถสร้างงานได้ กรุณาลองใหม่',
+                    text: 'ไม่สามารถสร้างงานได้ เลข COL ถูกคืนกลับแล้ว กรุณาลองใหม่',
                     confirmButtonColor: '#d33'
                 });
             } finally {
@@ -284,7 +285,7 @@ export const Step2JobAccept: React.FC<Step2JobAcceptProps> = ({ onComplete }) =>
     };
 
     return (
-        <div className="h-full flex flex-col p-6 animate-fade-in relative">
+        <div className="h-full flex flex-col p-3 md:p-6 animate-fade-in relative">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                     <ClipboardList className="w-6 h-6 text-blue-500" /> 2. รับงาน (Receive Job)

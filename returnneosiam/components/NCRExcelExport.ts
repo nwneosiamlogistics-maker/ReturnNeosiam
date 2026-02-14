@@ -64,6 +64,9 @@ export interface NCRFormData {
     qaAccept: boolean;
     qaReject: boolean;
     qaReason: string;
+
+    // Images
+    images?: string[];
 }
 
 export const exportNCRToExcel = async (formData: NCRFormData, ncrItems: NCRItem[], ncrNos: string) => {
@@ -216,11 +219,19 @@ export const exportNCRToExcel = async (formData: NCRFormData, ncrItems: NCRItem[
     r++;
 
     // Content Row
-    // Left: Images
+    // Left: Images (show URLs as clickable links)
     worksheet.mergeCells(r, 1, r + 5, 8);
     const imgBox = worksheet.getCell(r, 1);
-    imgBox.value = '(พื้นที่รูปภาพประกอบ)\nกรุณาดูไฟล์แนบหากมีรูปภาพ';
-    imgBox.alignment = alignCenter; imgBox.font = { ...fontNormal12, color: { argb: 'FF999999' } }; imgBox.border = borderAll;
+    if (formData.images && formData.images.length > 0) {
+        imgBox.value = formData.images.map((url, i) => `รูปที่ ${i + 1}: ${url}`).join('\n');
+        imgBox.alignment = { vertical: 'top', horizontal: 'left', wrapText: true, indent: 1 };
+        imgBox.font = { ...fontNormal12, color: { argb: 'FF0563C1' }, underline: true };
+    } else {
+        imgBox.value = '(ไม่มีรูปภาพ)';
+        imgBox.alignment = alignCenter;
+        imgBox.font = { ...fontNormal12, color: { argb: 'FF999999' } };
+    }
+    imgBox.border = borderAll;
 
     // Right: Problem Source Analysis
     // We map common analysis fields

@@ -1,8 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../DataContext';
-import { db } from '../firebase';
-import { ref, remove, set } from 'firebase/database';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend, AreaChart, Area, Line
@@ -11,7 +9,6 @@ import {
   Truck, CheckCircle, Clock, FileText, Package, AlertOctagon, DollarSign, Trash2, MapPin, Box,
   TrendingUp, Activity, AlertTriangle, RotateCcw
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 
 const COLORS = {
   Restock: '#22c55e', // Green
@@ -24,150 +21,24 @@ const COLORS = {
 
 const Dashboard: React.FC = () => {
 
-  const { items, ncrReports, runDataIntegrityCheck } = useData();
+  const { items: allItems, ncrReports: allNcrReports, dataRangeDays, setDataRangeDays } = useData();
 
-  const handleFactoryReset = async () => {
-    // 1. Password Check
-    const { value: password } = await Swal.fire({
-      title: 'ยืนยันรหัสผ่าน (Authentication)',
-      text: "กรุณากรอกรหัสผ่านเพื่อล้างข้อมูลทั้งหมด",
-      input: 'password',
-      inputPlaceholder: 'Enter password',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'ตรวจสอบ (Verify)',
-      cancelButtonText: 'ยกเลิก (Cancel)',
-      inputAttributes: {
-        autocapitalize: 'off',
-        autocorrect: 'off'
-      }
-    });
+  // Client-side date filtering based on dataRangeDays
+  const items = useMemo(() => {
+    if (dataRangeDays >= 9999) return allItems;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - dataRangeDays);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    return allItems.filter(i => i.date >= cutoffStr);
+  }, [allItems, dataRangeDays]);
 
-    if (!password) return; // User cancelled
-
-    if (password !== 'sansan856') {
-      await Swal.fire({
-        title: 'รหัสผ่านไม่ถูกต้อง',
-        text: 'Access Denied',
-        icon: 'error',
-        confirmButtonColor: '#ef4444'
-      });
-      return;
-    }
-
-    // 2. Final Confirmation
-    const result = await Swal.fire({
-      title: 'คำเตือน: ลบข้อมูลทั้งหมด?',
-      text: "ข้อมูลทั้งหมดจะหายไปถาวร ไม่สามารถกู้คืนได้! ยืนยันที่จะดำเนินการต่อหรือไม่?",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'ใช่, ฉันต้องการลบข้อมูลทั้งหมด',
-      cancelButtonText: 'ยกเลิก'
-    });
-
-    if (result.isConfirmed) {
-      // 3. Execute Reset
-      try {
-        Swal.fire({
-          title: 'กำลังล้างข้อมูล...',
-          text: 'Please wait while we reset the system',
-          allowOutsideClick: false,
-          didOpen: () => {
-            Swal.showLoading();
-          }
-        });
-
-        await remove(ref(db, 'return_records'));
-        await remove(ref(db, 'ncr_reports'));
-        await set(ref(db, 'ncr_counter'), 0);
-
-        await Swal.fire(
-          'เสร็จสิ้น!',
-          'ระบบได้รับการรีเซ็ตเรียบร้อยแล้ว',
-          'success'
-        );
-        location.reload();
-      } catch (error) {
-        console.error(error);
-        Swal.fire(
-          'เกิดข้อผิดพลาด',
-          'ไม่สามารถล้างข้อมูลได้ กรุณาลองใหม่',
-          'error'
-        );
-      }
-    }
-  };
-
-  const handleIntegrityCheck = async () => {
-    // 1. Password Check
-    const { value: password } = await Swal.fire({
-      title: 'ยืนยันรหัสผ่าน (Authentication)',
-      text: "กรุณากรอกรหัสผ่านเพื่อตรวจสอบและล้างข้อมูลขยะ",
-      input: 'password',
-      inputPlaceholder: 'Enter password',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#3b82f6', // Blue for Sync
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'ยืนยัน (Verify)',
-      cancelButtonText: 'ยกเลิก (Cancel)',
-      inputAttributes: {
-        autocapitalize: 'off',
-        autocorrect: 'off'
-      }
-    });
-
-    if (!password) return;
-
-    if (password !== 'sansan856') {
-      await Swal.fire({
-        title: 'รหัสผ่านไม่ถูกต้อง',
-        text: 'Access Denied',
-        icon: 'error',
-        confirmButtonColor: '#ef4444'
-      });
-      return;
-    }
-
-    // 2. Execute Check
-    Swal.fire({
-      title: 'กำลังตรวจสอบระบบ...',
-      text: 'Scanning for orphaned records...',
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
-
-    try {
-      const count = await runDataIntegrityCheck();
-
-      if (count > 0) {
-        await Swal.fire(
-          'ดำเนินการเสร็จสิ้น',
-          `ลบข้อมูลตกค้าง (Orphaned Records) ไปทั้งสิ้น ${count} รายการ`,
-          'success'
-        );
-      } else {
-        await Swal.fire(
-          'ระบบปกติ',
-          'ไม่พบข้อมูลตกค้างในระบบ',
-          'success'
-        );
-      }
-    } catch (error) {
-      console.error(error);
-      Swal.fire(
-        'เกิดข้อผิดพลาด',
-        'ไม่สามารถตรวจสอบระบบได้',
-        'error'
-      );
-    }
-  };
+  const ncrReports = useMemo(() => {
+    if (dataRangeDays >= 9999) return allNcrReports;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - dataRangeDays);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    return allNcrReports.filter(n => n.date >= cutoffStr);
+  }, [allNcrReports, dataRangeDays]);
 
   // 1. Operation Pipeline Metrics (Aligned with New 6-Step Workflow)
   const pipeline = useMemo(() => {
@@ -314,7 +185,7 @@ const Dashboard: React.FC = () => {
 
 
 
-  // 5. NCR Root Cause & Process Stats
+  // 6. NCR Root Cause & Process Stats
   const ncrStats = useMemo(() => {
     const rootCauses: Record<string, number> = {};
     const causes = { Packaging: 0, Transport: 0, Operation: 0, Environment: 0 };
@@ -369,7 +240,20 @@ const Dashboard: React.FC = () => {
             </div>
             <p className="text-slate-500 text-sm pl-14">Operation Performance Dashboard - ติดตาม Pipeline, Inventory และ Analysis</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              value={dataRangeDays}
+              onChange={(e) => setDataRangeDays(Number(e.target.value))}
+              className="px-3 py-2 text-sm font-semibold bg-white border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none cursor-pointer"
+              title="ช่วงข้อมูล"
+            >
+              <option value={30}>ย้อนหลัง 30 วัน</option>
+              <option value={60}>ย้อนหลัง 60 วัน</option>
+              <option value={90}>ย้อนหลัง 90 วัน</option>
+              <option value={180}>ย้อนหลัง 180 วัน</option>
+              <option value={365}>ย้อนหลัง 1 ปี</option>
+              <option value={9999}>ทั้งหมด</option>
+            </select>
             <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 rounded-full flex items-center gap-2 shadow-lg shadow-emerald-200">
               <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
               <span className="text-sm font-bold text-white">Live Status</span>
@@ -464,7 +348,7 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* 3. TRENDS & ANALYSIS (Main Chart) - Spans 2 Columns */}
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col">
+        <div className="lg:col-span-2 bg-white p-4 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col">
           <div className="mb-8 flex flex-col justify-between items-start gap-2">
             <div>
               <div className="flex items-center gap-3 mb-2">
@@ -536,7 +420,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* 4. TOP CRITICAL (Pink Bars) */}
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col">
+        <div className="bg-white p-4 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col">
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-1.5 h-8 bg-pink-500 rounded-full"></div>
@@ -586,33 +470,35 @@ const Dashboard: React.FC = () => {
       {/* 5. DISPOSITION MIX (Donut) & NCR */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
         {/* Donut Chart */}
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="bg-white p-4 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
           <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-slate-800"></span>
             สัดส่วนการจัดการสินค้า (Disposition Mix)
           </h3>
-          <div className="h-[300px]">
+          <div className="h-[350px] md:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={dispositionData}
-                  innerRadius={80}
-                  outerRadius={110}
+                  innerRadius={60}
+                  outerRadius={90}
                   paddingAngle={5}
                   dataKey="value"
                   cornerRadius={8}
+                  cx="50%"
+                  cy="40%"
                 >
                   {dispositionData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />)}
                 </Pie>
                 <Tooltip contentStyle={{ borderRadius: '12px' }} />
-                <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" />
+                <Legend verticalAlign="bottom" align="center" layout="horizontal" iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '16px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* NCR Area Chart */}
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="bg-white p-4 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
           <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-purple-600"></span>
             สาเหตุปัญหา (Problem Sources)
@@ -630,37 +516,6 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-      {/* MAINTENANCE ZONE */}
-      <div className="flex flex-col md:flex-row gap-4 justify-center mt-12 mb-8 opacity-70 hover:opacity-100 transition-opacity">
-
-        {/* Sync & Cleanup */}
-        <div className="border border-blue-200 bg-blue-50 rounded-lg p-6 flex flex-col items-center w-64 hover:shadow-md transition-shadow">
-          <h3 className="text-blue-700 font-bold text-sm mb-2 flex items-center gap-2">
-            <RotateCcw className="w-4 h-4" /> Sync & Cleanup Data
-          </h3>
-          <button onClick={handleIntegrityCheck} aria-label="ตรวจสอบและล้างข้อมูลขยะ" className="text-blue-600 underline text-xs cursor-pointer hover:text-blue-800 font-semibold">
-            ตรวจสอบและล้างข้อมูลขยะ
-          </button>
-          <div className="text-[10px] text-blue-400 mt-1">Remove orphaned NCR records</div>
-        </div>
-
-        {/* Factory Reset */}
-        <div className="border border-red-200 bg-red-50 rounded-lg p-6 flex flex-col items-center w-64 hover:shadow-md transition-shadow">
-          <h3 className="text-red-700 font-bold text-sm mb-2 flex items-center gap-2">
-            <Trash2 className="w-4 h-4" /> Data Factory Reset
-          </h3>
-          <button
-            onClick={handleFactoryReset}
-            aria-label="ล้างข้อมูลทั้งหมด (Reset All)"
-            className="text-red-600 underline text-xs cursor-pointer hover:text-red-800"
-          >
-            ล้างข้อมูลทั้งหมด (Reset All)
-          </button>
-          <div className="text-[10px] text-red-300 mt-1">Delete all 100%</div>
-        </div>
-
-      </div>
-
       {/* Password Modal - REMOVED, REPLACED BY SWAL */}
 
     </div >
@@ -712,7 +567,7 @@ const PipelineCard = React.memo(({ step, title, count, icon: Icon, variant = 'bl
   const theme = themes[variant] || themes.blue;
 
   return (
-    <div className={`relative p-5 rounded-[2rem] border ${theme.border} ${theme.bg} flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-2 hover:ring-offset-2 hover:ring-transparent ${theme.hoverBorder} cursor-pointer overflow-hidden group h-full min-h-[220px]`}>
+    <div className={`relative p-3 md:p-5 rounded-[2rem] border ${theme.border} ${theme.bg} flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-2 hover:ring-offset-2 hover:ring-transparent ${theme.hoverBorder} cursor-pointer overflow-hidden group h-full min-h-[160px] md:min-h-[220px]`}>
       {/* Decorative Blob */}
       <div className={`absolute -top-6 -right-6 w-24 h-24 rounded-full ${theme.blob} opacity-60 blur-2xl transition-transform duration-500 group-hover:scale-150`}></div>
 
@@ -727,7 +582,7 @@ const PipelineCard = React.memo(({ step, title, count, icon: Icon, variant = 'bl
       </div>
 
       {/* Count */}
-      <div className="relative z-10 text-4xl font-black text-slate-800 mb-2 transition-all group-hover:scale-105">
+      <div className="relative z-10 text-3xl md:text-4xl font-black text-slate-800 mb-2 transition-all group-hover:scale-105">
         <CountUpNumber end={count} />
       </div>
 
@@ -760,7 +615,7 @@ const StatCard = React.memo(({ title, value, subText, icon: Icon, variant = 'def
   const isDark = variant !== 'default';
 
   return (
-    <div className={`relative overflow-hidden rounded-[2rem] p-6 flex flex-col justify-between h-40 transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-2xl cursor-pointer group ${currentStyle}`}>
+    <div className={`relative overflow-hidden rounded-[2rem] p-4 md:p-6 flex flex-col justify-between h-36 md:h-40 transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-2xl cursor-pointer group ${currentStyle}`}>
       {/* Abstract Background Shapes */}
       {isDark && (
         <>
@@ -782,7 +637,7 @@ const StatCard = React.memo(({ title, value, subText, icon: Icon, variant = 'def
       </div>
 
       <div className="relative z-10 mt-auto">
-        <h3 className="text-3xl font-black tracking-tight group-hover:scale-105 transition-transform origin-left">{value}</h3>
+        <h3 className="text-2xl md:text-3xl font-black tracking-tight group-hover:scale-105 transition-transform origin-left">{value}</h3>
       </div>
     </div>
   );
@@ -822,7 +677,7 @@ const StockCard = React.memo(({ title, count, variant, icon: Icon, subTitle }: {
       </div>
 
       {/* Main Number */}
-      <div className="relative z-10 text-white font-black text-6xl leading-none tracking-tight drop-shadow-md flex items-baseline gap-2 my-2">
+      <div className="relative z-10 text-white font-black text-4xl md:text-6xl leading-none tracking-tight drop-shadow-md flex items-baseline gap-2 my-2">
         <CountUpNumber end={count} />
         <span className="text-xl font-bold opacity-70 tracking-normal">ชิ้น</span>
       </div>

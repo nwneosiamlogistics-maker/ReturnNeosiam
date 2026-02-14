@@ -194,9 +194,9 @@ export const Step2Logistics: React.FC<Step2LogisticsProps> = ({ onConfirm }) => 
     const isAllFilteredSelected = filteredItems.length > 0 && filteredItems.every(i => selectedIds.has(i.id));
 
     return (
-        <div className="h-full flex">
+        <div className="h-full flex flex-col md:flex-row">
             {/* Left Sidebar - Item List */}
-            <div className="w-80 border-r border-slate-700 bg-slate-800 flex flex-col">
+            <div className="w-full md:w-80 max-h-[50vh] md:max-h-full border-b md:border-b-0 md:border-r border-slate-700 bg-slate-800 flex flex-col">
                 <div className="p-4 border-b border-slate-700 font-bold text-slate-200 flex justify-between items-center">
                     <span>รายการสินค้า ({selectedIds.size}/{logisticsItems.length})</span>
                     <Truck className="w-4 h-4 text-blue-400" />
@@ -326,7 +326,7 @@ export const Step2Logistics: React.FC<Step2LogisticsProps> = ({ onConfirm }) => 
             </div>
 
             {/* Right Panel - Transport Form */}
-            <div className="flex-1 overflow-y-auto bg-slate-900 p-8">
+            <div className="flex-1 overflow-y-auto bg-slate-900 p-4 md:p-8">
                 <div className="max-w-2xl mx-auto space-y-6">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="p-3 bg-blue-600 rounded-xl shadow-lg">

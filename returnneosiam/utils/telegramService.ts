@@ -79,6 +79,69 @@ export const formatNCRMessage = (record: NCRRecord) => {
 };
 
 /**
+ * Formats damage summary section for Telegram messages
+ */
+export const formatDamageSummary = (record: ReturnRecord): string => {
+    const lines: string[] = [];
+
+    const productValue = record.pricePerUnit && record.quantity
+        ? (record.pricePerUnit * record.quantity).toLocaleString('th-TH')
+        : null;
+    const billValue = record.priceBill ? record.priceBill.toLocaleString('th-TH') : null;
+
+    lines.push(`\n📊 <b>สรุปความเสียหาย</b>`);
+    lines.push(`<b>สินค้า :</b> ${record.productName || '-'}`);
+    lines.push(`<b>จำนวน :</b> ${record.quantity} ${record.unit}`);
+    if (record.pricePerUnit) lines.push(`<b>ราคา/หน่วย :</b> ${record.pricePerUnit.toLocaleString('th-TH')} บาท`);
+    if (productValue) lines.push(`<b>มูลค่ารวม :</b> ${productValue} บาท`);
+    if (billValue) lines.push(`<b>ราคาหน้าบิล :</b> ${billValue} บาท`);
+
+    if (record.condition && record.condition !== 'Unknown') {
+        const condMap: Record<string, string> = {
+            'New': 'ใหม่', 'Good': 'ดี', 'Fair': 'พอใช้', 'Bad': 'เสียหาย',
+            'Damaged': 'ชำรุด', 'Expired': 'หมดอายุ', 'Defective': 'มีตำหนิ'
+        };
+        lines.push(`<b>สภาพสินค้า :</b> ${condMap[record.condition] || record.condition}`);
+    }
+    if (record.disposition && record.disposition !== 'Pending') {
+        const dispMap: Record<string, string> = {
+            'Restock': 'คืนสต๊อก', 'RTV': 'ส่งคืนผู้ขาย (RTV)',
+            'Recycle': 'ทำลาย/รีไซเคิล', 'Claim': 'เคลม',
+            'InternalUse': 'ใช้ภายใน', 'Sell': 'ขาย'
+        };
+        lines.push(`<b>การจัดการ :</b> ${dispMap[record.disposition] || record.disposition}`);
+    }
+    if (record.dispositionRoute) lines.push(`<b>เส้นทาง :</b> ${record.dispositionRoute}`);
+
+    const actions: string[] = [];
+    if (record.actionReject) actions.push(`ส่งคืน ${record.actionRejectQty || ''} ${record.unit}`);
+    if (record.actionRejectSort) actions.push(`คัดแยกส่งคืน ${record.actionRejectSortQty || ''} ${record.unit}`);
+    if (record.actionRework) actions.push(`แก้ไข ${record.actionReworkQty || ''} ${record.unit}${record.actionReworkMethod ? ` (${record.actionReworkMethod})` : ''}`);
+    if (record.actionSpecialAcceptance) actions.push(`ยอมรับกรณีพิเศษ ${record.actionSpecialAcceptanceQty || ''} ${record.unit}${record.actionSpecialAcceptanceReason ? ` (${record.actionSpecialAcceptanceReason})` : ''}`);
+    if (record.actionScrap) actions.push(`ทำลาย ${record.actionScrapQty || ''} ${record.unit}`);
+    if (record.actionReplace) actions.push(`เปลี่ยนใหม่ ${record.actionReplaceQty || ''} ${record.unit}`);
+    if (actions.length > 0) lines.push(`<b>การดำเนินการ :</b> ${actions.join(', ')}`);
+
+    const causes: string[] = [];
+    if (record.causePackaging) causes.push('บรรจุภัณฑ์');
+    if (record.causeTransport) causes.push('ขนส่ง');
+    if (record.causeOperation) causes.push('ปฏิบัติการ');
+    if (record.causeEnv) causes.push('สภาพแวดล้อม');
+    if (causes.length > 0) lines.push(`<b>สาเหตุหลัก :</b> ${causes.join(', ')}`);
+    if (record.causeDetail) lines.push(`<b>รายละเอียดสาเหตุ :</b> ${record.causeDetail}`);
+    if (record.preventionDetail) lines.push(`<b>การป้องกัน :</b> ${record.preventionDetail}`);
+
+    if (record.hasCost && record.costAmount) {
+        lines.push(`<b>💰 ค่าเสียหาย :</b> ${record.costAmount.toLocaleString('th-TH')} บาท (${record.costResponsible || '-'})`);
+    }
+    if (record.isFieldSettled && record.fieldSettlementAmount) {
+        lines.push(`<b>💰 ชดเชยหน้างาน :</b> ${record.fieldSettlementAmount.toLocaleString('th-TH')} บาท`);
+    }
+
+    return lines.join('\n');
+};
+
+/**
  * Formats a notification message for status updates (Trans-shipment, Hub Receive, Closure)
  */
 export const formatStatusUpdateMessage = (label: string, record: ReturnRecord, count?: number, transportInfo?: Partial<ReturnRecord> & { destination?: string, received?: boolean, closed?: boolean, plateNumber?: string, driverName?: string }) => {
@@ -137,6 +200,7 @@ ${logisticsContext}----------------------------------
 <b>พบปัญหาที่กระบวนการ :</b> ${problemProcess}
 <b>การติดตามค่าใช้จ่าย :</b> ${costInfo}
 <b>Field Settlement :</b> ${fieldSettlementInfo}
+${formatDamageSummary(record)}
 ----------------------------------
 📅 <i>Updated: ${new Date().toLocaleString('th-TH')}</i>
   `.trim();

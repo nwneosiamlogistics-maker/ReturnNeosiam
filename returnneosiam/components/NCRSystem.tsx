@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../DataContext';
 import { ReturnRecord, NCRRecord, NCRItem } from '../types';
-import { sendTelegramMessage } from '../utils/telegramService';
+import { sendTelegramMessage, formatDamageSummary } from '../utils/telegramService';
 import { Save, Printer, Image as ImageIcon, AlertTriangle, Plus, Trash2, X, Loader, CheckCircle, XCircle, HelpCircle, Download, Lock, Truck, Package, Search, User } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { uploadImagesToStorage, setNASUploadContext } from '../utils/imageUpload';
 import { BRANCH_LIST, RETURN_ROUTES } from '../constants';
 import { RESPONSIBLE_MAPPING } from './operations/utils';
 import { LineAutocomplete } from './LineAutocomplete';
@@ -14,7 +15,7 @@ import { exportNCRToExcel } from './NCRExcelExport';
 
 
 export default function NCRSystem() {
-    const { addNCRReport, getNextNCRNumber, addReturnRecord, ncrReports, systemConfig, items } = useData();
+    const { addNCRReport, getNextNCRNumber, rollbackNCRNumber, addReturnRecord, ncrReports, systemConfig, items } = useData();
 
     // --- State: Main Form Data ---
     // Note: We keep global problem/action flags in formData for backward compatibility or summary views,
@@ -151,19 +152,22 @@ export default function NCRSystem() {
         setFormData(prev => ({ ...prev, [field]: !prev[field] }));
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const [uploadingImages, setUploadingImages] = useState(false);
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
-            const files = Array.from(e.target.files);
-            const readers = files.map(file => {
-                return new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.readAsDataURL(file as Blob);
-                });
-            });
-            Promise.all(readers).then(base64Images => {
-                setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...base64Images] }));
-            });
+            const files = Array.from(e.target.files) as File[];
+            setUploadingImages(true);
+            try {
+                setNASUploadContext(formData.ncrNumber || '', 'ncr');
+                const urls = await uploadImagesToStorage(files, 'ncr-images');
+                setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...urls] }));
+            } catch (error) {
+                console.error('Image upload failed:', error);
+                Swal.fire('อัปโหลดรูปไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง', 'error');
+            } finally {
+                setUploadingImages(false);
+            }
         }
     };
 
@@ -237,22 +241,92 @@ export default function NCRSystem() {
     // 5. Validation & Save
     const validateForm = () => {
         const errors: string[] = [];
-        // --- VALIDATION DISABLED (Allow sending Telegram even if incomplete) ---
-        // if (!formData.founder.trim()) errors.push("ผู้พบปัญหา");
-        // if (ncrItems.length === 0) errors.push("รายการสินค้า (กรุณากดปุ่ม '+ เพิ่มรายการ')");
-        // const isCauseChecked = formData.causePackaging || formData.causeTransport || formData.causeOperation || formData.causeEnv;
-        // if (!isCauseChecked) errors.push("สาเหตุเกิดจาก (กรุณาเลือกอย่างน้อย 1 หัวข้อ)");
+        if (!formData.founder.trim()) errors.push("ผู้พบปัญหา (Founder)");
+        if (ncrItems.length === 0) errors.push("รายการสินค้า (กรุณากดปุ่ม '+ เพิ่มรายการ' อย่างน้อย 1 รายการ)");
         return errors;
     };
 
     const executeSave = async () => {
         setShowConfirmModal(false);
+
+        // 🛡️ Guard 1: Offline Detection
+        if (!navigator.onLine) {
+            Swal.fire({
+                icon: 'error',
+                title: 'ไม่มีการเชื่อมต่ออินเทอร์เน็ต',
+                text: 'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง',
+                confirmButtonColor: '#ef4444'
+            });
+            return;
+        }
+
+        // 🛡️ Hard Guard: Must have items
+        if (ncrItems.length === 0) {
+            Swal.fire({
+                icon: 'error',
+                title: 'ไม่มีรายการสินค้า',
+                text: 'กรุณากดปุ่ม "+ เพิ่มรายการ" เพื่อเพิ่มสินค้าอย่างน้อย 1 รายการก่อนบันทึก',
+                confirmButtonColor: '#ef4444'
+            });
+            return;
+        }
+
         setIsSaving(true);
+
+        // 🛡️ Guard 2: Prevent tab close during save
+        const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = 'กำลังบันทึกข้อมูล กรุณาอย่าปิดหน้านี้';
+        };
+        window.addEventListener('beforeunload', beforeUnloadHandler);
+
+        try {
+
+        // 🛡️ Guard 3: Duplicate refNo/poNo check against Step 2+ records
+        const refNos = new Set<string>();
+        for (const item of ncrItems) {
+            const r = (item.refNo || formData.poNo || '').trim().toLowerCase();
+            if (r && r !== '-') refNos.add(r);
+        }
+        if (refNos.size > 0) {
+            const conflicts = items.filter(existing => {
+                const existingRef = (existing.documentNo || existing.refNo || '').trim().toLowerCase();
+                if (!existingRef || existingRef === '-') return false;
+                if (!refNos.has(existingRef)) return false;
+                return existing.status !== 'Draft' && existing.status !== 'Requested';
+            });
+            if (conflicts.length > 0) {
+                const conflictList = conflicts.map(c =>
+                    `• ${c.documentNo || c.refNo} — ${c.productName || c.productCode} (${c.status})`
+                ).slice(0, 5).join('<br>');
+                const { isConfirmed } = await Swal.fire({
+                    icon: 'warning',
+                    title: 'พบเลขเอกสารซ้ำในระบบ',
+                    html: `
+                        <div class="text-left text-sm">
+                            <p class="mb-2">เลขที่อ้างอิง (Ref/PO) ที่กรอกตรงกับรายการที่อยู่ใน <b>Step 2+</b> แล้ว:</p>
+                            <div class="bg-amber-50 p-3 rounded border border-amber-200 text-xs text-amber-800 mb-3">${conflictList}</div>
+                            <p>ต้องการบันทึก NCR นี้ต่อหรือไม่?</p>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: 'บันทึกต่อ',
+                    cancelButtonText: 'ยกเลิก',
+                    confirmButtonColor: '#2563eb',
+                    cancelButtonColor: '#94a3b8',
+                });
+                if (!isConfirmed) {
+                    setIsSaving(false);
+                    window.removeEventListener('beforeunload', beforeUnloadHandler);
+                    return;
+                }
+            }
+        }
 
         const newNcrNo = await getNextNCRNumber();
         if (newNcrNo.includes('ERR')) {
-            setSaveResult({ success: false, message: "สร้างเลขที่ NCR ไม่สำเร็จ" });
-            setShowResultModal(true); setIsSaving(false); return;
+            setSaveResult({ success: false, message: "สร้างเลขที่ NCR ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
+            setShowResultModal(true); return;
         }
 
         let successCount = 0;
@@ -268,9 +342,12 @@ export default function NCRSystem() {
                 isRecordOnly: formData.isRecordOnly
             };
 
-            const success = await addNCRReport(record);
-            if (success) {
-                // SYNC TO OPERATIONS HUB (ReturnRecord)
+            const ncrSaveSuccess = await addNCRReport(record);
+            if (!ncrSaveSuccess) {
+                console.error(`❌ addNCRReport FAILED for ${newNcrNo}-${item.id}. Will NOT count as success.`);
+            }
+            {
+                // SYNC TO OPERATIONS HUB (ReturnRecord) — always attempt
                 const returnRecord: ReturnRecord = {
                     id: `RT-${new Date().getFullYear()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
                     refNo: item.refNo || formData.poNo || '-',
@@ -373,11 +450,10 @@ export default function NCRSystem() {
                 };
 
                 await addReturnRecord(returnRecord);
-                successCount++;
+                if (ncrSaveSuccess) successCount++;
             }
         }
 
-        setIsSaving(false);
         if (successCount === ncrItems.length) {
             setGeneratedNCRNumber(newNcrNo);
             setSaveResult({ success: true, message: "บันทึกข้อมูลสำเร็จ", ncrNo: newNcrNo });
@@ -388,11 +464,12 @@ export default function NCRSystem() {
             if (systemConfig.telegram?.enabled && systemConfig.telegram.chatId) {
                 const msgDate = new Date().toLocaleString('th-TH');
                 const founder = formData.founder || '-';
-                const branch = formData.branch || ncrItems[0]?.branch || '-';
-                const customerName = ncrItems[0]?.customerName || '-';
-                const destCustomer = ncrItems[0]?.destinationCustomer || '-';
-                const neoRef = ncrItems[0]?.neoRefNo || '-';
-                const refNo = ncrItems[0]?.refNo || '-';
+                const firstItem = ncrItems[0];
+                const branch = firstItem?.branch || formData.branch || '-';
+                const customerName = firstItem?.customerName || '-';
+                const destCustomer = firstItem?.destinationCustomer || '-';
+                const neoRef = firstItem?.neoRefNo || '-';
+                const refNo = firstItem?.refNo || formData.poNo || '-';
                 const docNo = newNcrNo;
                 const problemDetail = formData.problemDetail || '-';
                 const qty = ncrItems.reduce((acc, item) => acc + (item.quantity || 0), 0);
@@ -415,7 +492,7 @@ export default function NCRSystem() {
                     ? `จบงานหน้างาน (จ่าย: ${formData.fieldSettlementAmount} บาท, ผู้รับผิดชอบ: ${formData.fieldSettlementName} - ${formData.fieldSettlementPosition})`
                     : 'ไม่มี';
 
-                const detailedMessage = `🚨 <b>NCR Report (New) [NCR]</b>
+                const detailedMessage = `🚨 <b>NCR Report (New) [${docNo}]</b>
 ----------------------------------
 <b>วันที่ :</b> ${msgDate}
 <b>สาขา :</b> ${branch}
@@ -430,6 +507,30 @@ export default function NCRSystem() {
 <b>พบปัญหาที่กระบวนการ :</b> ${problemProcess || '-'}
 ${formData.isRecordOnly ? '<b>🔹 บันทึกข้อมูลเพื่อเป็นสถิติเท่านั้น (Fast Track)</b>\n' : ''}<b>การติดตามค่าใช้จ่าย :</b> ${costInfo}
 <b>Field Settlement :</b> ${fieldSettlementInfo}
+${formatDamageSummary({
+    productName: ncrItems[0]?.productName || '-',
+    quantity: qty,
+    unit: ncrItems[0]?.unit || 'ชิ้น',
+    pricePerUnit: ncrItems[0]?.pricePerUnit,
+    priceBill: ncrItems[0]?.priceBill,
+    condition: ncrItems[0]?.condition,
+    disposition: ncrItems[0]?.disposition,
+    dispositionRoute: ncrItems[0]?.dispositionRoute,
+    hasCost: formData.hasCost,
+    costAmount: formData.costAmount,
+    costResponsible: formData.costResponsible,
+    isFieldSettled: formData.isFieldSettled,
+    fieldSettlementAmount: formData.fieldSettlementAmount,
+    actionReject: formData.actionReject, actionRejectQty: formData.actionRejectQty,
+    actionRejectSort: formData.actionRejectSort, actionRejectSortQty: formData.actionRejectSortQty,
+    actionRework: formData.actionRework, actionReworkQty: formData.actionReworkQty, actionReworkMethod: formData.actionReworkMethod,
+    actionSpecialAcceptance: formData.actionSpecialAcceptance, actionSpecialAcceptanceQty: formData.actionSpecialAcceptanceQty, actionSpecialAcceptanceReason: formData.actionSpecialAcceptanceReason,
+    actionScrap: formData.actionScrap, actionScrapQty: formData.actionScrapQty,
+    actionReplace: formData.actionReplace, actionReplaceQty: formData.actionReplaceQty,
+    causePackaging: formData.causePackaging, causeTransport: formData.causeTransport,
+    causeOperation: formData.causeOperation, causeEnv: formData.causeEnv,
+    causeDetail: formData.causeDetail, preventionDetail: formData.preventionDetail,
+} as Partial<ReturnRecord> as ReturnRecord)}
 ----------------------------------
 🔗 <i>Status: ${formData.isRecordOnly ? 'Closed/Completed' : 'Open'}</i>`;
 
@@ -440,8 +541,15 @@ ${formData.isRecordOnly ? '<b>🔹 บันทึกข้อมูลเพื
                 );
             }
         } else {
-            setSaveResult({ success: false, message: "บันทึกข้อมูลล้มเหลวบางส่วน" });
+            await rollbackNCRNumber();
+            setSaveResult({ success: false, message: `บันทึกข้อมูลล้มเหลว (${successCount}/${ncrItems.length} สำเร็จ)\nเลข NCR ${newNcrNo} ถูกคืนกลับแล้ว กรุณาลองใหม่อีกครั้ง` });
             setShowResultModal(true);
+        }
+
+        } finally {
+            // 🛡️ Always remove beforeunload guard & reset saving state
+            window.removeEventListener('beforeunload', beforeUnloadHandler);
+            setIsSaving(false);
         }
     };
 
@@ -697,12 +805,12 @@ ${formData.isRecordOnly ? '<b>🔹 บันทึกข้อมูลเพื
                                 <ImageIcon className="w-4 h-4 text-indigo-600" /> รูปภาพ / เอกสารประกอบ
                             </div>
                             <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-indigo-200 rounded-xl bg-white hover:bg-indigo-50/30 transition-colors group cursor-pointer no-print relative">
-                                <input type="file" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" title="Upload Images" />
+                                {!uploadingImages && <input type="file" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" title="Upload Images" />}
                                 <div className="p-3 bg-indigo-50 text-indigo-500 rounded-full mb-2 group-hover:scale-110 transition-transform">
-                                    <Download className="w-5 h-5 rotate-180" />
+                                    {uploadingImages ? <Loader className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5 rotate-180" />}
                                 </div>
-                                <span className="text-xs font-bold text-indigo-600">คลิกเพื่ออัพโหลดรูปภาพ</span>
-                                <span className="text-[10px] text-slate-400 mt-1">หรือลากไฟล์มาวางที่นี่</span>
+                                <span className="text-xs font-bold text-indigo-600">{uploadingImages ? 'กำลังอัปโหลด...' : 'คลิกเพื่ออัพโหลดรูปภาพ'}</span>
+                                <span className="text-[10px] text-slate-400 mt-1">{uploadingImages ? 'กรุณารอสักครู่' : 'หรือลากไฟล์มาวางที่นี่'}</span>
                             </div>
                             {/* Print Only Placeholder */}
                             <div className="hidden print:block text-center text-slate-400 text-xs py-10 border border-slate-300 rounded bg-white">
@@ -742,8 +850,8 @@ ${formData.isRecordOnly ? '<b>🔹 บันทึกข้อมูลเพื
                             <ImageIcon className="w-4 h-4" /> รูปภาพ (Images)
                         </div>
                         <div className="flex flex-col items-center justify-center text-slate-400 min-h-[120px] border-2 border-dashed border-slate-300 rounded hover:bg-slate-50 relative print:hidden">
-                            <input type="file" title="อัพโหลดรูป" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                            <span className="text-xs font-bold">+ อัพโหลดรูปภาพ</span>
+                            {!uploadingImages && <input type="file" title="อัพโหลดรูป" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />}
+                            <span className="text-xs font-bold">{uploadingImages ? '⏳ กำลังอัปโหลด...' : '+ อัพโหลดรูปภาพ'}</span>
                         </div>
                         {formData.images && formData.images.length > 0 && (
                             <div className="grid grid-cols-2 gap-2 mt-2">

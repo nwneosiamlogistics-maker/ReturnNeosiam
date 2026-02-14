@@ -10,9 +10,11 @@ import CollectionSystem from './components/CollectionSystem';
 import LoginPage from './components/LoginPage';
 import LoginModal from './components/LoginModal';
 import Settings from './components/Settings';
+import OKRPerformance from './components/OKRPerformance';
 import HomeView from './components/HomeView';
 
 import { AppView, ReturnRecord } from './types';
+import { migrateBase64Images } from './utils/migrateImages';
 import { Bell, Menu } from 'lucide-react';
 import { DataProvider } from './DataContext';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -31,6 +33,31 @@ const MainApp: React.FC = () => {
   // Force-on-Mount: Reset to HOME on initial load
   useEffect(() => {
     setCurrentView(AppView.HOME);
+  }, []);
+
+  // Auto-migration: รันครั้งเดียวเงียบๆ ใน background
+  useEffect(() => {
+    const MIGRATION_KEY = 'neosiam_migration_v1';
+    if (localStorage.getItem(MIGRATION_KEY)) return;
+
+    const runMigration = async () => {
+      try {
+        console.log('[Auto-Migration] Starting...');
+        const result = await migrateBase64Images((p) => {
+          if (p.status === 'completed' || p.status === 'error') {
+            console.log(`[Auto-Migration] ${p.status}: migrated=${p.migratedImages}, failed=${p.failedImages}`);
+          }
+        });
+        if (result.status === 'completed') {
+          localStorage.setItem(MIGRATION_KEY, new Date().toISOString());
+          console.log('[Auto-Migration] Done & flagged.');
+        }
+      } catch (err) {
+        console.error('[Auto-Migration] Error:', err);
+      }
+    };
+
+    runMigration();
   }, []);
 
   // ===== PRIORITY GATEKEEPING =====
@@ -91,6 +118,8 @@ const MainApp: React.FC = () => {
           setCurrentView(view);
           if (step) setOperationsInitialStep(step);
         }} />;
+      case AppView.OKR:
+        return <OKRPerformance />;
       case AppView.SETTINGS:
         return <Settings />;
 
@@ -108,6 +137,7 @@ const MainApp: React.FC = () => {
       case AppView.COL_REPORT: return 'รายงาน COL';
       case AppView.INVENTORY: return 'คลังสินค้า (Inventory)';
       case AppView.COLLECTION: return 'งานรับสินค้า (Collection)';
+      case AppView.OKR: return 'OKR Performance';
       case AppView.SETTINGS: return 'การตั้งค่าระบบ (Settings)';
       default: return 'Neosiam Return';
     }

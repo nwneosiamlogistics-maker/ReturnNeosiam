@@ -4,6 +4,7 @@ import { ReturnRecord } from '../../../types';
 import { BRANCH_LIST, RETURN_ROUTES } from '../../../constants';
 import { RESPONSIBLE_MAPPING } from '../utils';
 import Swal from 'sweetalert2';
+import { uploadImagesToStorage, setNASUploadContext } from '../../../utils/imageUpload';
 
 interface ItemAnalysisModalProps {
     isOpen: boolean;
@@ -100,24 +101,25 @@ export const ItemAnalysisModal: React.FC<ItemAnalysisModalProps> = ({ isOpen, on
         });
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            const files = Array.from(e.target.files);
-            const promises = files.map((file: File) => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-            });
+    const [uploadingImages, setUploadingImages] = useState(false);
 
-            Promise.all(promises).then(base64Images => {
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const files = Array.from(e.target.files) as File[];
+            setUploadingImages(true);
+            try {
+                setNASUploadContext(item.ncrNumber || item.returnNo || '', 'analysis');
+                const urls = await uploadImagesToStorage(files, 'analysis-images');
                 setFormData(prev => ({
                     ...prev,
-                    images: [...(prev.images || []), ...base64Images]
+                    images: [...(prev.images || []), ...urls]
                 }));
-            });
+            } catch (error) {
+                console.error('Image upload failed:', error);
+                Swal.fire('อัปโหลดรูปไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง', 'error');
+            } finally {
+                setUploadingImages(false);
+            }
         }
     };
 
@@ -217,9 +219,9 @@ export const ItemAnalysisModal: React.FC<ItemAnalysisModalProps> = ({ isOpen, on
                                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="border-r border-slate-100 pr-4">
                                         <div className="flex flex-col items-center justify-center text-slate-400 min-h-[150px] border-2 border-dashed border-slate-300 rounded-lg hover:bg-slate-50 transition-colors relative">
-                                            <input type="file" aria-label="อัพโหลดรูปภาพ" title="อัพโหลดรูปภาพ" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                            <ImageIcon className="w-8 h-8 mb-2 opacity-50" />
-                                            <span className="text-xs font-bold">อัพโหลดรูปภาพ</span>
+                                            {!uploadingImages && <input type="file" aria-label="อัพโหลดรูปภาพ" title="อัพโหลดรูปภาพ" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />}
+                                            {uploadingImages ? <div className="animate-spin w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full mb-2"></div> : <ImageIcon className="w-8 h-8 mb-2 opacity-50" />}
+                                            <span className="text-xs font-bold">{uploadingImages ? 'กำลังอัปโหลด...' : 'อัพโหลดรูปภาพ'}</span>
                                         </div>
                                         {formData.images && formData.images.length > 0 && (
                                             <div className="grid grid-cols-3 gap-2 mt-4">

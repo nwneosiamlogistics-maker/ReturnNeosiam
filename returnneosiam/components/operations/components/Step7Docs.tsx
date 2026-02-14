@@ -154,7 +154,7 @@ export const Step7Docs: React.FC<Step7DocsProps> = ({ onPrintDocs }) => {
     const itemsScrap = safeItems.filter(i => i.disposition === 'Recycle' || (i.disposition as string) === 'Scrap');
 
     return (
-        <div className="h-full flex flex-col p-4">
+        <div className="h-full flex flex-col p-3 md:p-4">
             {/* Tabs */}
             <div className="flex gap-4 mb-4 border-b border-slate-200 pb-2">
                 <button

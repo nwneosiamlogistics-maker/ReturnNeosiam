@@ -160,6 +160,9 @@ export const canAccessView = (userRole: UserRole | undefined, view: AppView): bo
         case AppView.INVENTORY:
             return getModuleAccess(userRole, 'INVENTORY') !== 'NONE';
 
+        case AppView.OKR:
+            return true; // ทุกคนเข้าถึง OKR ได้
+
         case AppView.SETTINGS:
             return canAccessSettings(userRole);
 

@@ -215,13 +215,19 @@ export const NCRPrintPreview: React.FC<NCRPrintPreviewProps> = ({ item, onUpdate
                         </div>
 
                         <div className="flex flex-1 min-h-[300px]">
-                            {/* Left Column: Images Placeholder */}
-                            <div className="w-1/2 p-4 border-r border-black flex flex-col items-center justify-center text-slate-400">
-                                <div className="text-center">
-                                    <p>[รูปภาพประกอบ]</p>
-                                    <p className="text-xs mt-2 text-slate-300">พื้นที่สำหรับแนบรูปภาพสินค้าเสียหาย</p>
-                                    <p className="text-xs text-slate-300">หรือเอกสารที่เกี่ยวข้อง</p>
-                                </div>
+                            {/* Left Column: Images */}
+                            <div className="w-1/2 p-2 border-r border-black flex flex-col items-center justify-start">
+                                {item.images && item.images.length > 0 ? (
+                                    <div className="grid grid-cols-2 gap-1 w-full">
+                                        {item.images.map((img, idx) => (
+                                            <img key={idx} src={img} alt={`NCR ${idx + 1}`} className="w-full aspect-square object-cover rounded border border-slate-200" loading="lazy" />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-slate-300 mt-8">
+                                        <p className="text-sm">ไม่มีรูปภาพ</p>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Right Column: Checkboxes and Details */}

@@ -168,7 +168,7 @@ export const Step4Consolidation: React.FC<Step4ConsolidationProps> = ({ onComple
     };
 
     return (
-        <div className="h-full flex flex-col p-6 animate-fade-in">
+        <div className="h-full flex flex-col p-3 md:p-6 animate-fade-in">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                     <LayoutGrid className="w-6 h-6 text-slate-600" /> 4. รวมสินค้า (Branch Consolidation)

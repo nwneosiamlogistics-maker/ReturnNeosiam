@@ -198,6 +198,9 @@ const NCRReport: React.FC<NCRReportProps> = ({ onTransfer }) => {
       </div>
 
       <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-slate-200/60 shadow-xl overflow-hidden flex-1 flex flex-col print:hidden">
+        <div className="md:hidden flex items-center justify-center gap-2 py-1.5 bg-blue-50 text-blue-500 text-xs font-bold border-b border-blue-100 animate-pulse">
+          <span>← เลื่อนซ้าย-ขวาเพื่อดูข้อมูลเพิ่มเติม →</span>
+        </div>
         <div className="overflow-auto flex-1 relative ncr-table-container">
           <table className="w-max min-w-full text-left border-collapse">
             <thead className="bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-20 shadow-sm text-xs uppercase text-slate-500 font-bold tracking-wider">
@@ -302,13 +305,11 @@ const NCRReport: React.FC<NCRReportProps> = ({ onTransfer }) => {
                         </td>
                         <td className={`px-2 py-3 text-center sticky right-0 z-10 align-top border-l border-slate-100 ${isCanceled ? 'bg-slate-50 shadow-none' : 'bg-white shadow-[linear-gradient(to_right,rgba(0,0,0,0),rgba(0,0,0,0.05))] group-hover:bg-indigo-50/40'}`}>
                           <div className="flex items-center justify-center gap-1">
+                            <button onClick={() => handleViewNCRForm(report)} disabled={isCanceled} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all shadow-sm border border-transparent hover:border-blue-200 disabled:opacity-30" title="ดูรายละเอียด NCR"><Eye className="w-3.5 h-3.5" /></button>
                             <button onClick={() => handleRowExportExcel(report)} disabled={isCanceled} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-200 disabled:opacity-30" title="Export Excel"><Download className="w-3.5 h-3.5" /></button>
                             <button onClick={() => handleOpenPrint(report)} disabled={isCanceled} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-200 disabled:opacity-30" title="Print"><Printer className="w-3.5 h-3.5" /></button>
                             <button onClick={() => handleEditClick(report)} disabled={isCanceled} className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-200 disabled:opacity-30" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
                             <button onClick={() => handleDeleteClick(report.id)} disabled={isCanceled} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-200 disabled:opacity-30" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                            {!isCanceled && !correspondingReturn && (report.actionReject || report.actionScrap || report.actionRejectSort) && (
-                              <button onClick={() => handleCreateReturn(report)} className="ml-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white p-1.5 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105" title="Create Return"><ArrowRight className="w-3.5 h-3.5" /></button>
-                            )}
                             {correspondingReturn && (
                               <span className="ml-1 w-6 h-6 flex items-center justify-center bg-emerald-100 text-emerald-600 rounded-full border border-emerald-200" title="Synced"><CircleCheck className="w-3.5 h-3.5" /></span>
                             )}
@@ -426,7 +427,22 @@ const NCRReport: React.FC<NCRReportProps> = ({ onTransfer }) => {
                 </div>
 
                 {/* SECTION 1: PROBLEM */}
-                <table className="w-full border-2 border-black mb-6"><thead><tr className="border-b-2 border-black bg-slate-50"><th className="border-r-2 border-black w-1/3 py-2 text-slate-900">รูปภาพ / เอกสาร</th><th className="py-2 text-slate-900">รายละเอียดของปัญหาที่พบ (ผู้พบปัญหา)</th></tr></thead><tbody><tr><td className="border-r-2 border-black p-4 text-center align-middle h-64 relative bg-white"><div className="flex flex-col items-center justify-center text-red-500 opacity-50"><h2 className="text-3xl font-bold mb-2">รูปภาพ / เอกสาร</h2><h2 className="text-3xl font-bold">ตามแนบ</h2><ImageIcon className="w-16 h-16 mt-4" /></div></td><td className="p-4 align-top text-sm bg-white"><div className="mb-2 font-bold underline text-slate-900">พบปัญหาที่กระบวนการ <span className="text-red-500">*</span></div><div className="grid grid-cols-2 gap-2 mb-4 text-slate-700">
+                <table className="w-full border-2 border-black mb-6"><thead><tr className="border-b-2 border-black bg-slate-50"><th className="border-r-2 border-black w-1/3 py-2 text-slate-900">รูปภาพ / เอกสาร</th><th className="py-2 text-slate-900">รายละเอียดของปัญหาที่พบ (ผู้พบปัญหา)</th></tr></thead><tbody><tr><td className="border-r-2 border-black p-4 align-top bg-white">
+                    {ncrFormItem.images && ncrFormItem.images.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {ncrFormItem.images.map((img, idx) => (
+                          <a key={idx} href={img} target="_blank" rel="noopener noreferrer" className="block aspect-square bg-slate-100 rounded overflow-hidden border border-slate-200 hover:shadow-lg transition-shadow">
+                            <img src={img} alt={`NCR Image ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-slate-300 h-48">
+                        <ImageIcon className="w-12 h-12 mb-2" />
+                        <span className="text-sm font-bold">ไม่มีรูปภาพ</span>
+                      </div>
+                    )}
+                  </td><td className="p-4 align-top text-sm bg-white"><div className="mb-2 font-bold underline text-slate-900">พบปัญหาที่กระบวนการ <span className="text-red-500">*</span></div><div className="grid grid-cols-2 gap-2 mb-4 text-slate-700">
                   <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded"><input type="checkbox" disabled={!isEditMode} checked={ncrFormItem.problemDamaged} onChange={() => handleProblemSelection('problemDamaged')} /> ชำรุด</label>
                   <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded"><input type="checkbox" disabled={!isEditMode} checked={ncrFormItem.problemDamagedInBox} onChange={() => handleProblemSelection('problemDamagedInBox')} /> ชำรุดในกล่อง</label>
                   <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded"><input type="checkbox" disabled={!isEditMode} checked={ncrFormItem.problemLost} onChange={() => handleProblemSelection('problemLost')} /> สูญหาย</label>
@@ -596,7 +612,18 @@ const NCRReport: React.FC<NCRReportProps> = ({ onTransfer }) => {
         </div>
       )}
 
-      <style>{`.ncr-table-container { max-height: calc(100vh - 300px); }`}</style>
+      <style>{`
+        .ncr-table-container { max-height: calc(100vh - 300px); }
+        .ncr-table-container { -webkit-overflow-scrolling: touch; }
+        .ncr-table-container::-webkit-scrollbar { height: 6px; width: 6px; }
+        .ncr-table-container::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .ncr-table-container::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        .ncr-table-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        @media (max-width: 768px) {
+          .ncr-table-container { overflow-x: scroll !important; }
+          .ncr-table-container::-webkit-scrollbar { height: 4px; display: block !important; }
+        }
+      `}</style>
     </div>
   );
 };

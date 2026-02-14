@@ -293,7 +293,7 @@ export const Step8Closure: React.FC = () => {
     };
 
     return (
-        <div className="h-full flex flex-col p-6 animate-fade-in overflow-hidden">
+        <div className="h-full flex flex-col p-3 md:p-6 animate-fade-in overflow-hidden">
             <h3 className="text-xl font-bold text-slate-100 mb-4 flex items-center gap-2">
                 <FileText className="w-6 h-6 text-green-500" /> 6. รายการรอปิดงาน (Pending Completion)
             </h3>

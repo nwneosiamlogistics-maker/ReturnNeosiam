@@ -160,7 +160,7 @@ export const Step5Logistics: React.FC<Step5LogisticsProps> = ({ onConfirm }) => 
     const isAllFilteredSelected = filteredItems.length > 0 && filteredItems.every(i => selectedIds.has(i.id));
 
     return (
-        <div className="h-full flex flex-col p-6 animate-fade-in overflow-y-auto">
+        <div className="h-full flex flex-col p-3 md:p-6 animate-fade-in overflow-y-auto">
             <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
                 <Truck className="w-6 h-6 text-orange-600" /> 5. ขนส่ง (Logistics)
             </h3>

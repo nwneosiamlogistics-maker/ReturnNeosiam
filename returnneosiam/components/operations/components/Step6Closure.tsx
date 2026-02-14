@@ -12,7 +12,7 @@ interface Step5CompleteProps {
 
 export const Step6Closure: React.FC<Step5CompleteProps> = ({ documentedItems, completedItems, handleCompleteJob }) => {
     return (
-        <div className="h-full flex flex-col p-6 animate-fade-in overflow-hidden">
+        <div className="h-full flex flex-col p-3 md:p-6 animate-fade-in overflow-hidden">
             <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
                 <FileText className="w-6 h-6 text-purple-600" /> รายการรอปิดงาน (Pending Completion / Direct Return)
             </h3>

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../../../DataContext';
 import { ReturnRecord, ItemCondition, DispositionAction, TransportInfo } from '../../../types';
 import { getISODetails, RESPONSIBLE_MAPPING } from '../utils';
-import { sendTelegramMessage, formatStatusUpdateMessage } from '../../../utils/telegramService';
+import { sendTelegramMessage, formatStatusUpdateMessage, formatDamageSummary } from '../../../utils/telegramService';
 import Swal from 'sweetalert2';
 
 export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, onClearInitialData?: () => void) => {
@@ -594,6 +594,7 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
 <b>พบปัญหาที่กระบวนการ :</b> ${problemProcess || '-'}
 ${item.isRecordOnly ? '<b>🔹 บันทึกข้อมูลเพื่อเป็นสถิติเท่านั้น (Record Only)</b>\n' : ''}<b>การติดตามค่าใช้จ่าย :</b> ${costInfo}
 <b>Field Settlement :</b> ${fieldSettlementInfo}
+${formatDamageSummary(firstItem as ReturnRecord)}
 ----------------------------------
 🔗 <i>Status: ${item.isRecordOnly ? 'Closed/Completed' : 'Requested'}</i>`;
 

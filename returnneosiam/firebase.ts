@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
-
+import { getStorage } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 
 // Your web app's Firebase configuration
@@ -23,4 +23,5 @@ console.log("✅ Firebase App Initialized (RTDB):", app.name);
 
 // Initialize Realtime Database and get a reference to the service
 export const db = getDatabase(app);
+export const storage = getStorage(app);
 export const auth = getAuth(app);

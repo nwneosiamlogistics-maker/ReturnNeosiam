@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { LayoutDashboard, LogOut, ScanBarcode, AlertOctagon, FileBarChart, Wifi, LayoutGrid, BarChart, Truck, X, Settings } from 'lucide-react';
+import { LayoutDashboard, LogOut, ScanBarcode, AlertOctagon, FileBarChart, Wifi, LayoutGrid, BarChart, Truck, X, Settings, Target } from 'lucide-react';
 import { AppView } from '../types';
 import { ref, set } from 'firebase/database';
 import { db } from '../firebase';
@@ -38,6 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen = f
     { id: AppView.INVENTORY, label: 'คลังสินค้า (Inventory)', icon: LayoutGrid },
     { id: AppView.COLLECTION, label: 'งานรับสินค้า (Collection Tasks)', icon: Truck },
     { id: AppView.COL_REPORT, label: 'รายงาน COL', icon: BarChart },
+    { id: AppView.OKR, label: 'OKR Performance', icon: Target },
     { id: AppView.SETTINGS, label: 'ตั้งค่าระบบ', icon: Settings },
   ];
 

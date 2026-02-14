@@ -341,7 +341,7 @@ export const Step3BranchReceive: React.FC<Step3BranchReceiveProps> = ({ onComple
     };
 
     return (
-        <div className="h-full flex flex-col p-6 animate-fade-in relative">
+        <div className="h-full flex flex-col p-3 md:p-6 animate-fade-in relative">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                     <Activity className="w-6 h-6 text-indigo-500" /> 3. รับสินค้า (Branch Physical Receive)
