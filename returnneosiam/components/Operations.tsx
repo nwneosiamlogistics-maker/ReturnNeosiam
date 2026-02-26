@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import {
   Menu, Truck, Activity,
-  FileText, LayoutGrid, CheckCircle, ShieldCheck,
-  ClipboardList, FileInput
+  FileText, LayoutGrid, CheckCircle, ShieldCheck
 } from 'lucide-react';
 import { useOperationsLogic } from './operations/hooks/useOperationsLogic';
 import { Step1LogisticsRequest } from './operations/components/Step1LogisticsRequest';
@@ -38,21 +37,18 @@ export const Operations: React.FC<OperationsProps> = ({ initialData, onClearInit
 
   // New Menu Structure mapping to the Flowchart
   const MENU_ITEMS = [
-    // --- ORANGE FLOW (Inbound Logistics / COL) ---
-    { id: 1, label: '1. ใบสั่งงานรับกลับ (Import Excel)', icon: FileInput, count: undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
-    { id: 12, label: '2. รับงาน (Receive Job)', icon: ClipboardList, count: derived.step2Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
-    { id: 13, label: '3. รับสินค้า (Physical Receive)', icon: Activity, count: derived.step3Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
-    { id: 14, label: '4. รวมสินค้า (Branch Consolidation)', icon: LayoutGrid, count: derived.step4Items.length || undefined, color: 'text-orange-500', group: 'Inbound Logistics (COL)' },
-
-
-    // --- BLUE FLOW (NCR System) ---
-    { id: 2, label: '2. รวบรวมและระบุขนส่ง (Consolidation & Logistics)', icon: Truck, count: derived.ncrStep2Items?.length || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
-    { id: 3, label: '3. รับสินค้าเข้า Hub (Received at Hub)', icon: LayoutGrid, count: derived.step6Items.length || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
-    { id: 4, label: '4. ตรวจสอบคุณภาพ (QC)', icon: ShieldCheck, count: undefined, color: 'text-indigo-600', group: 'NCR Hub' },
-    { id: 5, label: '5. ส่งเอกสารคืน (Docs)', icon: FileText, count: derived.step7Items.length || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
-    { id: 6, label: '6. รายการรอปิดงาน (Pending Completion)', icon: Activity, count: derived.step8Items.length || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
-    { id: 7, label: '7. รายการที่จบงานแล้ว (Completed)', icon: CheckCircle, count: undefined, color: 'text-green-600', group: 'NCR Hub' },
+    { id: 2, label: '2. รวบรวมและระบุขนส่ง (Consolidation & Logistics)', icon: Truck, count: derived.ncrStep2GroupCount || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
+    { id: 3, label: '3. รับสินค้าเข้า Hub (Received at Hub)', icon: LayoutGrid, count: derived.step6GroupCount || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
+    { id: 4, label: '4. ตรวจสอบคุณภาพ (QC)', icon: ShieldCheck, count: derived.step4GroupCount || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
+    { id: 5, label: '5. ส่งเอกสารคืน (Docs)', icon: FileText, count: derived.step7GroupCount || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
+    { id: 6, label: '6. รายการรอปิดงาน (Pending Completion)', icon: Activity, count: derived.step8GroupCount || undefined, color: 'text-indigo-600', group: 'NCR Hub' },
+    { id: 7, label: '7. รายการที่จบงานแล้ว (Completed)', icon: CheckCircle, count: derived.completedGroupCount || undefined, color: 'text-green-600', group: 'NCR Hub' },
   ];
+
+  const MENU_GROUPS = React.useMemo(
+    () => Array.from(new Set(MENU_ITEMS.map(item => item.group))),
+    [MENU_ITEMS]
+  );
 
   const renderContent = () => {
     switch (state.activeStep) {
@@ -141,7 +137,7 @@ export const Operations: React.FC<OperationsProps> = ({ initialData, onClearInit
         </div>
 
         <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-6 scrollbar-thin scrollbar-thumb-slate-700">
-          {['Inbound Logistics (COL)', 'NCR Hub'].map((group) => {
+          {MENU_GROUPS.map((group) => {
             const items = MENU_ITEMS.filter(i => i.group === group);
             if (items.length === 0) return null;
             return (

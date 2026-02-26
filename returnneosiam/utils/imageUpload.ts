@@ -1,5 +1,3 @@
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
 import { uploadToNAS } from './nasUpload';
 import { NASConfig } from '../types';
 
@@ -21,7 +19,12 @@ export const setNASUploadContext = (docNo: string, category: string) => {
  * Compress image file/blob before upload to reduce bandwidth
  * Target: ~200KB-ish per image (WebP, 800px width, quality 0.6)
  */
-const compressImage = (file: File | Blob, maxWidth = 800, quality = 0.6): Promise<Blob> => {
+const compressImage = (
+  file: File | Blob,
+  maxWidth = 800,
+  quality = 0.6,
+  mime: 'image/webp' | 'image/jpeg' | 'image/png' = 'image/webp'
+): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const canvas = document.createElement('canvas');
@@ -44,7 +47,7 @@ const compressImage = (file: File | Blob, maxWidth = 800, quality = 0.6): Promis
           if (blob) resolve(blob);
           else reject(new Error('Failed to compress image'));
         },
-        'image/webp',
+        mime,
         quality
       );
     };
@@ -62,42 +65,60 @@ export const uploadImageToStorage = async (
   file: File,
   folder: string = 'ncr-images'
 ): Promise<string> => {
-  const compressed = await compressImage(file);
-  const filename = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.webp`;
+  const tryUpload = async (
+    outMime: 'image/webp' | 'image/jpeg' | 'image/png',
+    ext: 'webp' | 'jpg' | 'jpeg' | 'png'
+  ): Promise<string> => {
+    const compressed = await compressImage(file, 800, outMime === 'image/jpeg' ? 0.85 : 0.6, outMime);
+    const filename = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-  // Strategy: NAS first → if fails, fallback to Firebase
-  if (_nasConfig?.enabled && _nasConfig.apiUrl && _nasConfig.apiKey) {
-    try {
+    if (_nasConfig?.enabled && _nasConfig.apiUrl && _nasConfig.apiKey) {
       const nasResult = await uploadToNAS(_nasConfig, compressed, {
         docNo: _currentDocNo,
         category: _currentCategory || folder,
         filename,
+        contentType: outMime,
       });
-
       if (nasResult.success && nasResult.url) {
-        console.log('[Upload] ✅ NAS primary:', nasResult.url);
-        // Background: backup to Firebase (fire-and-forget)
-        const fbFilename = `${folder}/${filename}`;
-        const storageRef = ref(storage, fbFilename);
-        uploadBytes(storageRef, compressed, { contentType: 'image/webp' })
-          .then(() => console.log('[Upload] Firebase backup done'))
-          .catch(err => console.warn('[Upload] Firebase backup failed:', err));
+        console.log('[Upload] ✅ NAS:', nasResult.url);
         return nasResult.url;
       }
-
-      console.warn('[Upload] NAS failed:', nasResult.error, '→ fallback to Firebase');
-    } catch (err) {
-      console.warn('[Upload] NAS error:', err, '→ fallback to Firebase');
+      throw new Error(nasResult.error || 'NAS upload failed');
     }
-  }
+    throw new Error('NAS not configured');
+  };
 
-  // Fallback: Firebase
-  const fbFilename = `${folder}/${filename}`;
-  const storageRef = ref(storage, fbFilename);
-  await uploadBytes(storageRef, compressed, { contentType: 'image/webp' });
-  const firebaseUrl = await getDownloadURL(storageRef);
-  console.log('[Upload] Firebase (fallback):', firebaseUrl);
-  return firebaseUrl;
+  try {
+    // Attempt WebP first
+    return await tryUpload('image/webp', 'webp');
+  } catch (err) {
+    const msg = (err as Error)?.message || '';
+    // If NAS rejects WebP type, retry as JPEG (.jpg → .jpeg) แล้วค่อย PNG (ยังคง NAS-only)
+    if (/file type not allowed/i.test(msg) || /mime/i.test(msg)) {
+      console.warn('[Upload] WebP not allowed on NAS → retry as JPEG');
+      try {
+        return await tryUpload('image/jpeg', 'jpg');
+      } catch (err2) {
+        const msg2 = (err2 as Error)?.message || '';
+        if (/file type not allowed/i.test(msg2) || /mime/i.test(msg2)) {
+          console.warn('[Upload] JPEG (.jpg) not allowed on NAS → retry as JPEG (.jpeg)');
+          try {
+            return await tryUpload('image/jpeg', 'jpeg');
+          } catch (err3) {
+            const msg3 = (err3 as Error)?.message || '';
+            if (/file type not allowed/i.test(msg3) || /mime/i.test(msg3)) {
+              console.warn('[Upload] JPEG (.jpeg) not allowed on NAS → retry as PNG');
+              return await tryUpload('image/png', 'png');
+            }
+            throw err3 as Error;
+          }
+        }
+        throw err2 as Error;
+      }
+    }
+    console.warn('[Upload] NAS error:', err, '→ abort (NAS-only mode)');
+    throw err as Error;
+  }
 };
 
 /**
@@ -148,10 +169,23 @@ export const uploadBase64ToStorage = async (
 ): Promise<string> => {
   const blob = base64ToBlob(base64);
   const compressed = await compressImage(blob);
-  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
-  const storageRef = ref(storage, filename);
-  await uploadBytes(storageRef, compressed, { contentType: 'image/webp' });
-  return getDownloadURL(storageRef);
+  const filename = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.webp`;
+
+  if (!_nasConfig?.enabled || !_nasConfig.apiUrl || !_nasConfig.apiKey) {
+    throw new Error('NAS not configured');
+  }
+
+  const nasResult = await uploadToNAS(_nasConfig, compressed, {
+    category: folder,
+    filename,
+    contentType: 'image/webp',
+  });
+
+  if (!nasResult.success || !nasResult.url) {
+    throw new Error(nasResult.error || 'NAS upload failed');
+  }
+
+  return nasResult.url;
 };
 
 /**

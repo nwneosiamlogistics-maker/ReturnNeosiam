@@ -7,7 +7,7 @@ import { sendTelegramMessage, formatStatusUpdateMessage } from '../../../utils/t
 import Swal from 'sweetalert2';
 
 export const Step6HubReceive: React.FC = () => {
-    const { items, updateReturnRecord, ncrReports, systemConfig } = useData();
+    const { items, updateReturnRecord, ncrReports, systemConfig, dataRangeDays } = useData();
     const [filterBranch, setFilterBranch] = React.useState<string>('');
     const [filterCustomer, setFilterCustomer] = React.useState<string>('');
     const [filterDestination, setFilterDestination] = React.useState<string>('');
@@ -15,9 +15,20 @@ export const Step6HubReceive: React.FC = () => {
 
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
+    // Filter by date range to exclude old records
+    const recentItems = React.useMemo(() => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - dataRangeDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        return items.filter(item => {
+            const itemDate = item.dateRequested || item.date;
+            return itemDate >= cutoffStr;
+        });
+    }, [items, dataRangeDays]);
+
     // Filter Items: Status 'InTransitToHub', 'COL_InTransit', or 'NCR_InTransit'
     const incomingItems = React.useMemo(() => {
-        return items.filter(item => {
+        return recentItems.filter(item => {
             // Check for verification (If NCR Report is Canceled, hide it) -> Only for NCR
             if (item.ncrNumber) {
                 const linkedReport = ncrReports.find(r => r.ncrNo === item.ncrNumber);
@@ -28,7 +39,7 @@ export const Step6HubReceive: React.FC = () => {
 
             return item.status === 'InTransitToHub' || item.status === 'COL_InTransit' || item.status === 'NCR_InTransit';
         });
-    }, [items, ncrReports]);
+    }, [recentItems, ncrReports]);
 
     const handleHubReceive = async (targetItem: ReturnRecord, groupItems: ReturnRecord[] = []) => {
         if (isSubmitting) return;
@@ -129,7 +140,7 @@ export const Step6HubReceive: React.FC = () => {
 
         const result = await Swal.fire({
             title: 'ยืนยันรับทั้งหมด?',
-            text: `ยืนยันการรับสินค้าเข้า Hub ทั้งหมด ${filteredItems.length} รายการ?`,
+            text: `ยืนยันการรับสินค้าเข้า Hub ทั้งหมด ${groupedCount} กลุ่ม?`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'รับทั้งหมด (Receive All)',
@@ -210,6 +221,8 @@ export const Step6HubReceive: React.FC = () => {
         }));
     }, [filteredItems]);
 
+    const groupedCount = groupedItems.length;
+
     const handleToggleExpand = (key: string) => {
         setExpandedGroups(prev => {
             const next = new Set(prev);
@@ -225,14 +238,14 @@ export const Step6HubReceive: React.FC = () => {
                 <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                     <Truck className="w-5 h-5 text-amber-500" /> รับสินค้าเข้า Hub (Received at Hub)
                 </h3>
-                {filteredItems.length > 0 && (
+                {groupedCount > 0 && (
                     <button
                         onClick={handleHubReceiveAll}
-                        aria-label={`รับทั้งหมด (${filteredItems.length})`}
-                        title={`รับทั้งหมด (${filteredItems.length})`}
+                        aria-label={`รับทั้งหมด (${groupedCount})`}
+                        title={`รับทั้งหมด (${groupedCount})`}
                         className="w-full md:w-auto bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all flex justify-center"
                     >
-                        รับทั้งหมด ({filteredItems.length})
+                        รับทั้งหมด ({groupedCount})
                     </button>
                 )}
             </div>

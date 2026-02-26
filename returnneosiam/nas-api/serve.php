@@ -16,7 +16,7 @@ $UPLOAD_DIRS = array(
 header('Access-Control-Allow-Origin: *');
 
 $filePath = isset($_GET['file']) ? $_GET['file'] : '';
-$filePath = preg_replace('/[^a-zA-Z0-9_\-\/\.]/', '_', $filePath);
+$filePath = trim($filePath);
 
 if (empty($filePath)) {
     http_response_code(400);
@@ -24,34 +24,39 @@ if (empty($filePath)) {
     exit;
 }
 
+// Security: block path traversal attempts
+if (strpos($filePath, '..') !== false) {
+    http_response_code(403);
+    echo 'Invalid path';
+    exit;
+}
+
 // ค้นหาไฟล์ + security check (ป้องกัน path traversal)
 $realFile = false;
 foreach ($UPLOAD_DIRS as $dir) {
-    $candidate = $dir . '/' . $filePath;
-    $realBase = realpath($dir);
-    $realCandidate = realpath($candidate);
-    if ($realBase !== false && $realCandidate !== false
-        && strpos($realCandidate, $realBase) === 0
-        && is_file($realCandidate)) {
-        $realFile = $realCandidate;
+    $candidate = rtrim($dir, '/') . '/' . ltrim($filePath, '/');
+    if (file_exists($candidate) && is_file($candidate)) {
+        $realFile = $candidate;
         break;
     }
 }
 
 if ($realFile === false) {
     http_response_code(404);
-    echo 'File not found';
+    echo "File not found. Please check Synology 'open_basedir' and 'http' group permissions.";
     exit;
 }
 
 // MIME type detection: finfo first, fallback to extension mapping
 $mime = 'application/octet-stream';
 if (function_exists('finfo_open')) {
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $detected = finfo_file($finfo, $realFile);
-    finfo_close($finfo);
-    if ($detected && $detected !== 'application/octet-stream') {
-        $mime = $detected;
+    $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+    if ($finfo) {
+        $detected = @finfo_file($finfo, $realFile);
+        @finfo_close($finfo);
+        if ($detected && $detected !== 'application/octet-stream') {
+            $mime = $detected;
+        }
     }
 }
 if ($mime === 'application/octet-stream') {
@@ -70,3 +75,4 @@ header('Cache-Control: public, max-age=2592000');
 header('ETag: "' . md5_file($realFile) . '"');
 
 readfile($realFile);
+exit;

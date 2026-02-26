@@ -5,13 +5,14 @@ import Swal from 'sweetalert2';
 import { useData } from '../../../DataContext';
 import { ReturnRecord, TransportInfo } from '../../../types';
 import { RETURN_ROUTES, BRANCH_LIST } from '../../../constants';
+import { sendTelegramMessage } from '../../../utils/telegramService';
 
 interface Step4ConsolidationProps {
     onComplete?: () => void;
 }
 
 export const Step4Consolidation: React.FC<Step4ConsolidationProps> = ({ onComplete }) => {
-    const { items, updateReturnRecord } = useData();
+    const { items, updateReturnRecord, getNextCollectionNumber, systemConfig } = useData();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [consolidationDate, setConsolidationDate] = React.useState(new Date().toISOString().split('T')[0]);
 
@@ -102,9 +103,16 @@ export const Step4Consolidation: React.FC<Step4ConsolidationProps> = ({ onComple
         setIsSubmitting(true);
 
         try {
+            // Generate COL number for this consolidation batch
+            const colNumber = await getNextCollectionNumber();
+
+            // Get the actual items for Telegram message
+            const consolidatedItems = items.filter(i => targetConsolidateIds.includes(i.id));
+
             for (const id of targetConsolidateIds) {
                 await updateReturnRecord(id, {
                     status: 'COL_Consolidated',
+                    collectionOrderId: colNumber,
                     dateConsolidated: consolidationDate,
                     preliminaryDecision: 'Return',
                     preliminaryRoute: tempRoute,
@@ -112,11 +120,50 @@ export const Step4Consolidation: React.FC<Step4ConsolidationProps> = ({ onComple
                 });
             }
 
+            // Send Telegram notification
+            if (systemConfig.telegram?.enabled && systemConfig.telegram.chatId) {
+                const firstItem = consolidatedItems[0];
+                const msgDate = new Date().toLocaleString('th-TH');
+                const branch = firstItem?.branch || '-';
+                const customerName = firstItem?.customerName || '-';
+                const destCustomer = firstItem?.destinationCustomer || '-';
+
+                const uniqueRNumbers = Array.from(new Set(consolidatedItems.map(i => i.documentNo).filter(Boolean)));
+                const rNumberDisplay = uniqueRNumbers.length > 0
+                    ? uniqueRNumbers.slice(0, 5).join(', ') + (uniqueRNumbers.length > 5 ? ` (+${uniqueRNumbers.length - 5})` : '')
+                    : '-';
+
+                const qty = consolidatedItems.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0);
+                const unit = firstItem?.unit || 'PCS';
+
+                const itemsSummary = consolidatedItems.slice(0, 10).map((it, idx) =>
+                    `${idx + 1}. ${it.productName || '-'} x${Number(it.quantity) || 0} ${it.unit || 'PCS'}`
+                ).join('\n') + (consolidatedItems.length > 10 ? `\n... และอีก ${consolidatedItems.length - 10} รายการ` : '');
+
+                const telegramMsg = `<b>📦 Collection Report (Consolidated) [${colNumber}]</b>
+----------------------------------
+<b>วันที่รวมสินค้า :</b> ${consolidationDate}
+<b>วันที่แจ้ง :</b> ${msgDate}
+<b>สาขา :</b> ${branch}
+<b>ลูกค้า / ลูกค้าปลายทาง :</b> ${customerName} / ${destCustomer}
+<b>เลข COL :</b> ${colNumber}
+<b>เลขที่เอกสาร (เลข R) :</b> ${rNumberDisplay}
+<b>เส้นทาง :</b> ${tempRoute}
+<b>จำนวนรายการ :</b> ${consolidatedItems.length} รายการ (รวม ${qty} ${unit})
+
+📋 <b>รายการคืนสินค้า</b>
+${itemsSummary}
+----------------------------------
+🔗 <i>Status: COL_Consolidated</i>`;
+
+                await sendTelegramMessage(systemConfig.telegram.botToken, systemConfig.telegram.chatId, telegramMsg);
+            }
+
             await Swal.fire({
                 icon: 'success',
                 title: 'สำเร็จ',
-                text: 'รวมสินค้าและบันทึกข้อมูลเรียบร้อยแล้ว',
-                timer: 1500,
+                text: `รวมสินค้าเรียบร้อย! เลข COL: ${colNumber}`,
+                timer: 2000,
                 showConfirmButton: false
             });
 

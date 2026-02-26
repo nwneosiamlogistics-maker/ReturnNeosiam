@@ -21,7 +21,7 @@ export interface NASUploadResult {
 export const uploadToNAS = async (
   config: NASConfig,
   file: Blob | File,
-  options: { docNo?: string; category?: string; filename?: string } = {}
+  options: { docNo?: string; category?: string; filename?: string; contentType?: string } = {}
 ): Promise<NASUploadResult> => {
   if (!config.enabled || !config.apiUrl || !config.apiKey) {
     return { success: false, error: 'NAS not configured' };
@@ -35,8 +35,13 @@ export const uploadToNAS = async (
     const path = `${subFolder}/${filename}`;
 
     const formData = new FormData();
-    formData.append('file', file, filename);
+    const inputType = (file as Blob & { type?: string }).type;
+    const explicitType = options.contentType || inputType || 'application/octet-stream';
+    const uploadFile = file instanceof File ? file : new File([file], filename, { type: explicitType });
+    formData.append('file', uploadFile, filename);
     formData.append('path', path);
+
+    console.log('[NAS Upload] Start', { path, filename, contentType: explicitType });
 
     const response = await fetch(config.apiUrl, {
       method: 'POST',
@@ -56,6 +61,7 @@ export const uploadToNAS = async (
     }
 
     if (!result.success) {
+      console.warn('[NAS Upload] Failed', { error: result.error, path, filename, contentType: explicitType });
       return { success: false, error: result.error || JSON.stringify(result) };
     }
 

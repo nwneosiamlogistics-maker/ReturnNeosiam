@@ -275,7 +275,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       console.log(`📝 Writing ReturnRecord: ${item.id} (ncr: ${item.ncrNumber || 'N/A'})`);
-      await set(ref(db, 'return_records/' + item.id), item);
+      await set(ref(db, 'return_records/' + item.id), stripUndefinedDeep(item));
       console.log(`✅ ReturnRecord saved: ${item.id}`);
       return true;
     } catch (error: unknown) {
@@ -338,7 +338,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      await update(ref(db, 'return_records/' + id), data);
+      await update(ref(db, 'return_records/' + id), stripUndefinedDeep(data));
       return true;
     } catch (error: unknown) {
       if ((error as { code: string }).code === 'PERMISSION_DENIED') {
@@ -368,6 +368,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  
+  function stripUndefinedDeep<T>(input: T): T {
+    if (Array.isArray(input)) {
+      const mapped = (input as unknown[])
+        .map((v) => stripUndefinedDeep(v as unknown))
+        .filter((v) => v !== undefined);
+      return mapped as unknown as T;
+    }
+    if (input && typeof input === 'object') {
+      const out: Record<string, unknown> = {};
+      Object.entries(input as Record<string, unknown>).forEach(([k, v]) => {
+        if (v === undefined) return;
+        const sv = stripUndefinedDeep(v as unknown);
+        if (sv !== undefined) out[k] = sv;
+      });
+      return out as unknown as T;
+    }
+    return input;
+  }
+
   const addNCRReport = async (item: NCRRecord): Promise<boolean> => {
     // 🛡️ Guard: Critical ID check
     if (!item.id) {
@@ -384,7 +404,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       console.log(`📝 Writing NCR: ${item.id} (ncrNo: ${item.ncrNo})`);
-      await set(ref(db, 'ncr_reports/' + item.id), item);
+      await set(ref(db, 'ncr_reports/' + item.id), stripUndefinedDeep(item));
       console.log(`✅ NCR saved successfully: ${item.id}`);
       return true;
     } catch (error: unknown) {

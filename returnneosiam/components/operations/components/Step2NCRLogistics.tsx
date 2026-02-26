@@ -12,7 +12,7 @@ interface Step2NCRLogisticsProps {
 }
 
 export const Step2NCRLogistics: React.FC<Step2NCRLogisticsProps> = ({ onConfirm }) => {
-    const { items, updateReturnRecord, ncrReports } = useData();
+    const { items, updateReturnRecord, ncrReports, dataRangeDays } = useData();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,6 +44,17 @@ export const Step2NCRLogistics: React.FC<Step2NCRLogisticsProps> = ({ onConfirm 
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [typeFilter, setTypeFilter] = useState<'ALL' | 'NCR' | 'COL'>('ALL');
 
+    // Filter by date range to exclude old records
+    const recentItems = useMemo(() => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - dataRangeDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        return items.filter(item => {
+            const itemDate = item.dateRequested || item.date;
+            return itemDate >= cutoffStr;
+        });
+    }, [items, dataRangeDays]);
+
     // Helper: check if item is NCR or COL (excluding canceled NCR reports)
     const isValidNCR = (item: ReturnRecord) => {
         if (item.ncrNumber) {
@@ -54,13 +65,21 @@ export const Step2NCRLogistics: React.FC<Step2NCRLogisticsProps> = ({ onConfirm 
     };
     const isValidCOL = (item: ReturnRecord) => item.status === 'COL_Consolidated';
 
-    // Counts for filter badges
-    const ncrCount = useMemo(() => items.filter(isValidNCR).length, [items, ncrReports]);
-    const colCount = useMemo(() => items.filter(isValidCOL).length, [items]);
+    // Counts for filter badges (count unique groups, not individual items)
+    const ncrCount = useMemo(() => {
+        const ncrItems = recentItems.filter(isValidNCR);
+        const uniqueKeys = new Set(ncrItems.map(i => i.ncrNumber || i.id));
+        return uniqueKeys.size;
+    }, [recentItems, ncrReports]);
+    const colCount = useMemo(() => {
+        const colItems = recentItems.filter(isValidCOL);
+        const uniqueKeys = new Set(colItems.map(i => i.collectionOrderId || i.id));
+        return uniqueKeys.size;
+    }, [recentItems]);
 
     // Filter Logic - Show NCR items (Requested) AND/OR COL items (COL_Consolidated)
     const pendingItems = useMemo(() => {
-        return items.filter(item => {
+        return recentItems.filter(item => {
             const ncr = isValidNCR(item);
             const col = isValidCOL(item);
 
@@ -68,7 +87,7 @@ export const Step2NCRLogistics: React.FC<Step2NCRLogisticsProps> = ({ onConfirm 
             if (typeFilter === 'COL') return col;
             return ncr || col;
         });
-    }, [items, ncrReports, typeFilter]);
+    }, [recentItems, ncrReports, typeFilter]);
 
     const uniqueBranches = useMemo(() => Array.from(new Set(pendingItems.map(i => i.branch))).filter(Boolean), [pendingItems]);
 
@@ -357,7 +376,7 @@ export const Step2NCRLogistics: React.FC<Step2NCRLogisticsProps> = ({ onConfirm 
                     </div>
 
                     <div className="text-xs md:text-sm text-slate-500">
-                        รอ: <span className="font-bold text-indigo-600">{filteredItems.length}</span>
+                        รอ: <span className="font-bold text-indigo-600">{groupedItems.length}</span>
                     </div>
                 </div>
 

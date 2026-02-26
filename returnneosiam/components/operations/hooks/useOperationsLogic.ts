@@ -7,7 +7,7 @@ import { sendTelegramMessage, formatStatusUpdateMessage, formatDamageSummary } f
 import Swal from 'sweetalert2';
 
 export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, onClearInitialData?: () => void) => {
-    const { items, addReturnRecord, updateReturnRecord, addNCRReport, getNextNCRNumber, getNextReturnNumber, systemConfig, ncrReports } = useData();
+    const { items, addReturnRecord, updateReturnRecord, addNCRReport, getNextNCRNumber, getNextReturnNumber, systemConfig, ncrReports, dataRangeDays } = useData();
 
     // Workflow State
     const [activeStep, setActiveStep] = useState<number>(2);
@@ -136,11 +136,25 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
     const [customProblemType, setCustomProblemType] = useState('');
     const [customRootCause, setCustomRootCause] = useState('');
 
+    // Filter by date range for badge counts (same logic as Step2NCRLogistics)
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - dataRangeDays);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const recentItems = items.filter(item => {
+        const itemDate = item.dateRequested || item.date;
+        return itemDate >= cutoffStr;
+    });
+    const activeRecentItems = recentItems.filter(item => {
+        if (!item.ncrNumber) return true;
+        const lr = ncrReports.find(r => r.ncrNo === item.ncrNumber);
+        return !(lr && lr.status === 'Canceled');
+    });
+
     // Derived Data (filtered items) - 8 Step Workflow
 
     // Step 2 Input: Requested (Exclude NCR)
     const step2Items = items.filter(i => i.status === 'Requested' && i.documentType !== 'NCR');
-    const ncrStep2Items = items.filter(i => {
+    const ncrStep2Items = activeRecentItems.filter(i => {
         // Condition 1: NCR Items
         const isNCR = i.documentType === 'NCR' || !!i.ncrNumber;
         if (isNCR) {
@@ -154,6 +168,9 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
 
         return false;
     });
+
+    // Count unique groups for Step 2 badge (NCR Number or COL ID)
+    const ncrStep2GroupCount = new Set(ncrStep2Items.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size;
 
     // Step 3 Input: JobAccepted
     const step3Items = items.filter(i => i.status === 'JobAccepted');
@@ -210,8 +227,20 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
         i.status === 'DirectReturn'
     );
 
+    // Count unique groups for sidebar badges (using recentItems for date-filtered counts)
+    const step4QCItems = activeRecentItems.filter(i => i.status === 'NCR_HubReceived' || i.status === 'ReceivedAtHub');
+    const step4GroupCount = new Set(step4QCItems.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size;
+    const recentStep6 = activeRecentItems.filter(i => i.status === 'InTransitToHub' || i.status === 'NCR_InTransit' || i.status === 'COL_InTransit');
+    const step6GroupCount = new Set(recentStep6.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size;
+    const recentStep7 = activeRecentItems.filter(i => step7Items.some(s => s.id === i.id));
+    const step7GroupCount = new Set(recentStep7.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size;
+    const recentStep8 = activeRecentItems.filter(i => i.status === 'DocsCompleted' || i.status === 'ReturnToSupplier' || i.status === 'DirectReturn');
+    const step8GroupCount = new Set(recentStep8.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size;
+
     // Completed History
     const completedItems = items.filter(i => i.status === 'Completed');
+    const recentCompleted = activeRecentItems.filter(i => i.status === 'Completed');
+    const completedGroupCount = new Set(recentCompleted.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size;
 
     // Aliases for Props Compatibility
     const logisticItems = step5Items;
@@ -395,25 +424,26 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
             let successCount = 0;
 
             // --- BATCH IDENTIFIER GENERATION ---
-            // All items in Step1 are NCR - generate ONE shared NCR number per batch
+            const isBatchNCR = itemsToProcess.some(i => i.documentType === 'NCR' || !!i.ncrNumber);
             let sharedNcrNumber = '';
 
-            const needsNcr = itemsToProcess.some(i => !i.ncrNumber);
-
-            if (needsNcr) sharedNcrNumber = await getNextNCRNumber();
+            if (isBatchNCR) {
+                const needsNcr = itemsToProcess.some(i => !i.ncrNumber);
+                if (needsNcr) sharedNcrNumber = await getNextNCRNumber();
+            }
+            // COL number is created at Step 4 (Branch Consolidation), not here
             // ------------------------------------
 
             for (const item of itemsToProcess) {
-                // All items get NCR Number (Step1 is NCR only)
-                const finalNcrNumber = item.ncrNumber || sharedNcrNumber;
+                const finalNcrNumber = isBatchNCR ? (item.ncrNumber || sharedNcrNumber) : '';
+                const finalColNumber = '';
 
                 const runningId = await getNextReturnNumber();
                 const record: ReturnRecord = {
                     ...item as ReturnRecord,
                     id: runningId,
                     refNo: item.refNo || '-',
-                    // NCR only - no collection order
-                    collectionOrderId: '',
+                    collectionOrderId: finalColNumber,
                     amount: (item.quantity || 0) * (item.priceBill || 0),
                     reason: item.problemDetail || item.notes || 'แจ้งคืนสินค้า',
                     status: item.isFieldSettled ? 'Settled_OnField' : (item.isRecordOnly ? 'Completed' : 'Requested'),
@@ -426,6 +456,7 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
                     customerName: item.customerName || 'Unknown Customer',
                     category: 'General',
                     ncrNumber: finalNcrNumber,
+                    documentType: isBatchNCR ? 'NCR' : 'LOGISTICS',
                 };
 
                 // Sanitize record to remove undefined values for Firebase
@@ -434,7 +465,8 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
                 const success = await addReturnRecord(sanitizedRecord);
 
                 if (success) {
-                    // Always create NCR Report for both document types
+                    // Only create NCR Report for NCR items (not COL)
+                    if (isBatchNCR) {
                     const ncrRecord = {
                             id: finalNcrNumber + '-' + record.id,
                             ncrNo: finalNcrNumber,
@@ -519,6 +551,7 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
                         // Sanitize NCR Record as well
                     const sanitizedNCR = JSON.parse(JSON.stringify(ncrRecord));
                     await addNCRReport(sanitizedNCR);
+                    } // end if (isBatchNCR)
                     successCount++;
                 }
             }
@@ -540,10 +573,8 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
                 setIsCustomBranch(false);
                 setActiveStep(2);
 
-                if (systemConfig.telegram?.enabled && systemConfig.telegram.chatId) {
-                    const isNCR = itemsToProcess.some(i => i.documentType === 'NCR' || !!i.ncrNumber);
-
-                    // Common Data (Take from first item or formData)
+                // Telegram: Only send for NCR items (COL sends at Step 4 Consolidation)
+                if (isBatchNCR && systemConfig.telegram?.enabled && systemConfig.telegram.chatId) {
                     const firstItem = itemsToProcess[0];
                     const msgDate = new Date().toLocaleString('th-TH');
                     const branch = firstItem.branch || '-';
@@ -552,12 +583,11 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
                     const destCustomer = firstItem.destinationCustomer || '-';
                     const neoRef = firstItem.neoRefNo || '-';
                     const refNo = firstItem.refNo || '-';
-                    const docNo = isNCR ? (firstItem.ncrNumber || 'NCR-NEW') : (firstItem.collectionOrderId || 'COL-NEW');
+                    const docNo = firstItem.ncrNumber || sharedNcrNumber || 'NCR-NEW';
                     const problemDetail = firstItem.problemDetail || firstItem.reason || '-';
-                    const qty = itemsToProcess.reduce((acc, i) => acc + (i.quantity || 0), 0);
+                    const qty = itemsToProcess.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0);
                     const problemSource = firstItem.problemSource || firstItem.problemAnalysis || '-';
 
-                    // Process Checkboxes (using first item as representative for batch)
                     const item = firstItem;
                     const problemProcess = [
                         item.problemDamaged && 'ชำรุด', item.problemDamagedInBox && 'ชำรุดในกล่อง', item.problemLost && 'สูญหาย',
@@ -576,10 +606,7 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
                         ? `จบงานหน้างาน (จ่าย: ${item.fieldSettlementAmount} บาท, ผู้รับผิดชอบ: ${item.fieldSettlementName} - ${item.fieldSettlementPosition})`
                         : 'ไม่มี';
 
-
-                    const headerTitle = isNCR ? '🚨 NCR Report (New)' : '📦 Collection Report (New)';
-
-                    const detailedMessage = `<b>${headerTitle} [${docNo}]</b>
+                    const detailedMessage = `<b>🚨 NCR Report (New) [${docNo}]</b>
 ----------------------------------
 <b>วันที่ :</b> ${msgDate}
 <b>สาขา :</b> ${branch}
@@ -587,7 +614,7 @@ export const useOperationsLogic = (initialData?: Partial<ReturnRecord> | null, o
 <b>ลูกค้า / ลูกค้าปลายทาง :</b> ${customerName} / ${destCustomer}
 <b>Neo Ref No. :</b> ${neoRef}
 <b>เลขที่บิล / Ref No. :</b> ${refNo}
-<b>เลขที่เอกสาร (เลข R) :</b> ${isNCR ? '-' : docNo}
+<b>เลขที่เอกสาร (เลข R) :</b> ${docNo}
 <b>รายละเอียดของปัญหา :</b> ${problemDetail}
 <b>จำนวนสินค้า :</b> ${qty} ${firstItem.unit || 'ชิ้น'} ${itemsToProcess.length > 1 ? `(รวม ${itemsToProcess.length} รายการ)` : ''}
 <b>วิเคราะห์ปัญหาเกิดจาก :</b> ${problemSource}
@@ -1064,7 +1091,8 @@ ${formatDamageSummary(firstItem as ReturnRecord)}
         derived: {
             uniqueCustomers, uniqueDestinations, uniqueFounders, uniqueProductCodes, uniqueProductNames,
             step2Items, step3Items, step4Items, step5Items, step6Items, step7Items, step8Items,
-            ncrStep2Items,
+            ncrStep2Items, ncrStep2GroupCount,
+            step4GroupCount, step6GroupCount, step7GroupCount, step8GroupCount, completedGroupCount,
             completedItems,
             logisticItems, hubReceiveItems, hubDocItems, closureItems,
             requestedItems, receivedItems, gradedItems, docItems, processedItems: step7Items

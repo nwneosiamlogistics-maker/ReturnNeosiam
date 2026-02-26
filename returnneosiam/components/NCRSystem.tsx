@@ -344,6 +344,15 @@ export default function NCRSystem() {
                 console.log(`📷 Uploaded ${uploadedUrls.length} images to NAS folder: ncr/${newNcrNo}/`);
             } catch (err) {
                 console.error('📷 Image upload during save failed:', err);
+                await rollbackNCRNumber();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'อัปโหลดรูปไป NAS ไม่สำเร็จ',
+                    text: (err as Error).message || 'กรุณาตรวจสอบการตั้งค่า NAS แล้วลองใหม่',
+                    confirmButtonColor: '#ef4444'
+                });
+                setIsSaving(false);
+                return;
             } finally {
                 setUploadingImages(false);
             }

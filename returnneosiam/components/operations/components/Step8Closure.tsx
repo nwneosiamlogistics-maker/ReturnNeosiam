@@ -10,7 +10,7 @@ import Swal from 'sweetalert2';
 type FilterMode = 'ALL' | 'NCR' | 'COL';
 
 export const Step8Closure: React.FC = () => {
-    const { items, updateReturnRecord, ncrReports, systemConfig } = useData();
+    const { items, updateReturnRecord, ncrReports, systemConfig, dataRangeDays } = useData();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // UI State
@@ -19,10 +19,21 @@ export const Step8Closure: React.FC = () => {
     const [filterMode, setFilterMode] = useState<FilterMode>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
 
+    // Filter by date range to exclude old records
+    const recentItems = React.useMemo(() => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - dataRangeDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        return items.filter(item => {
+            const itemDate = item.dateRequested || item.date;
+            return itemDate >= cutoffStr;
+        });
+    }, [items, dataRangeDays]);
+
     // Filter Items: Status 'DocsCompleted', 'COL_Documented', 'NCR_Documented', 'DirectReturn', 'ReturnToSupplier'
     // AND apply NCR/COL Filter + Search
     const documentedItems = React.useMemo(() => {
-        return items.filter(item => {
+        return recentItems.filter(item => {
             // Check for verification (If NCR Report is Canceled, hide it) -> Only for NCR
             if (item.ncrNumber) {
                 const linkedReport = ncrReports.find(r => r.ncrNo === item.ncrNumber);
@@ -62,7 +73,7 @@ export const Step8Closure: React.FC = () => {
 
             return true;
         });
-    }, [items, filterMode, ncrReports, searchQuery]);
+    }, [recentItems, filterMode, ncrReports, searchQuery]);
 
     // Grouping Logic
     const groupedItems = React.useMemo(() => {
@@ -93,10 +104,23 @@ export const Step8Closure: React.FC = () => {
 
     // Completed Items
     const completedItems = React.useMemo(() => {
-        return items.filter(item => item.status === 'Completed').sort((a, b) => {
+        return recentItems.filter(item => {
+            if (item.ncrNumber) {
+                const linkedReport = ncrReports.find(r => r.ncrNo === item.ncrNumber);
+                if (linkedReport && linkedReport.status === 'Canceled') {
+                    return false;
+                }
+            }
+
+            return item.status === 'Completed';
+        }).sort((a, b) => {
             return (new Date(b.dateCompleted || '').getTime() - new Date(a.dateCompleted || '').getTime());
         });
-    }, [items]);
+    }, [recentItems, ncrReports]);
+
+    const completedGroupCount = React.useMemo(() => {
+        return new Set(completedItems.map(item => item.ncrNumber || item.collectionOrderId || item.id)).size;
+    }, [completedItems]);
 
     const handleCompleteJob = async (id: string) => {
         if (isSubmitting) return;
@@ -308,7 +332,7 @@ export const Step8Closure: React.FC = () => {
                             : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                     }`}
                 >
-                    รายการที่ต้องดำเนินการ ({documentedItems.length})
+                    รายการที่ต้องดำเนินการ ({groupedItems.length})
                 </button>
                 <button
                     onClick={() => setActiveTab('completed')}
@@ -318,7 +342,7 @@ export const Step8Closure: React.FC = () => {
                             : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                     }`}
                 >
-                    รายการที่จบงานแล้ว ({completedItems.length})
+                    รายการที่จบงานแล้ว ({completedGroupCount})
                 </button>
             </div>
 
@@ -327,7 +351,7 @@ export const Step8Closure: React.FC = () => {
             <div className="bg-slate-800 rounded-xl shadow-sm border border-slate-700 overflow-hidden flex flex-col flex-1">
                 <div className="p-4 bg-purple-900/30 border-b border-purple-700/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-3">
-                        <span className="font-bold text-purple-200">รายการที่ต้องดำเนินการ ({documentedItems.length})</span>
+                        <span className="font-bold text-purple-200">รายการที่ต้องดำเนินการ ({groupedItems.length})</span>
 
                         {/* Filter Toggle */}
                         <div className="flex bg-slate-700 rounded-lg p-1 border border-slate-600 shadow-sm">

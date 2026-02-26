@@ -5,13 +5,24 @@ import { ReturnRecord } from '../../../types';
 import { DispositionBadge } from './DispositionBadge';
 
 export const StepCompleted: React.FC = () => {
-    const { items, ncrReports } = useData();
+    const { items, ncrReports, dataRangeDays } = useData();
     const [selectedItem, setSelectedItem] = useState<ReturnRecord | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
+    // Filter by date range to exclude old records
+    const recentItems = useMemo(() => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - dataRangeDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        return items.filter(item => {
+            const itemDate = item.dateRequested || item.date;
+            return itemDate >= cutoffStr;
+        });
+    }, [items, dataRangeDays]);
+
     // Filter Completed Items (Completed or DirectReturn)
     const completedItems = useMemo(() => {
-        return items.filter(item => {
+        return recentItems.filter(item => {
             // Check for verification (If NCR Report is Canceled, hide it) -> Only for NCR
             if (item.ncrNumber) {
                 const linkedReport = ncrReports.find(r => r.ncrNo === item.ncrNumber);
@@ -35,15 +46,23 @@ export const StepCompleted: React.FC = () => {
             const dateB = b.dateCompleted || b.dateInTransit || b.date;
             return new Date(dateB).getTime() - new Date(dateA).getTime();
         });
-    }, [items, searchTerm, ncrReports]);
+    }, [recentItems, searchTerm, ncrReports]);
+
+    const getGroupKey = React.useCallback((item: ReturnRecord) => {
+        return item.ncrNumber || item.collectionOrderId || item.id;
+    }, []);
+
+    const getGroupCount = React.useCallback((list: ReturnRecord[]) => {
+        return new Set(list.map(getGroupKey)).size;
+    }, [getGroupKey]);
 
     const stats = useMemo(() => {
         return {
-            total: completedItems.length,
-            direct: completedItems.filter(i => i.status === 'DirectReturn').length,
-            processed: completedItems.filter(i => i.status === 'Completed').length
+            total: getGroupCount(completedItems),
+            direct: getGroupCount(completedItems.filter(i => i.status === 'DirectReturn')),
+            processed: getGroupCount(completedItems.filter(i => i.status === 'Completed'))
         };
-    }, [completedItems]);
+    }, [completedItems, getGroupCount]);
 
     return (
         <div className="h-full flex flex-col md:flex-row">
@@ -156,7 +175,7 @@ export const StepCompleted: React.FC = () => {
                 {/* Footer Stats */}
                 <div className="p-3 border-t border-slate-700 bg-slate-800">
                     <div className="text-xs text-slate-400 text-center">
-                        รายการทั้งหมด: <span className="font-bold text-slate-200">{completedItems.length}</span> รายการ
+                        รายการทั้งหมด: <span className="font-bold text-slate-200">{stats.total}</span> รายการ
                     </div>
                 </div>
             </div>

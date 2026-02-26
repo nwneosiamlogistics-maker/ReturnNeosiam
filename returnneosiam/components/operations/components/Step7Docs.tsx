@@ -11,15 +11,26 @@ interface Step7DocsProps {
 }
 
 export const Step7Docs: React.FC<Step7DocsProps> = ({ onPrintDocs }) => {
-    const { items, updateReturnRecord, ncrReports } = useData();
+    const { items, updateReturnRecord, ncrReports, dataRangeDays } = useData();
     const [activeTab, setActiveTab] = React.useState<'NCR' | 'COLLECTION'>('NCR');
+
+    // Filter by date range to exclude old records
+    const recentItems = React.useMemo(() => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - dataRangeDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        return items.filter(item => {
+            const itemDate = item.dateRequested || item.date;
+            return itemDate >= cutoffStr;
+        });
+    }, [items, dataRangeDays]);
 
     // Filter Items:
     // We want items that have passed QC or are ready for documentation.
     // In strict NCR flow: 'NCR_QCCompleted' (from Step4HubQC)
     // In legacy/Collection flow: 'HubReceived' (if QC skipped) or 'QCCompleted'
     const processedItems = React.useMemo(() => {
-        return items.filter(item => {
+        return recentItems.filter(item => {
             // Check for verification (If NCR Report is Canceled, hide it)
             if (item.ncrNumber) {
                 const linkedReport = ncrReports.find(r => r.ncrNo === item.ncrNumber);
@@ -53,7 +64,7 @@ export const Step7Docs: React.FC<Step7DocsProps> = ({ onPrintDocs }) => {
 
             return false;
         });
-    }, [items, ncrReports]);
+    }, [recentItems, ncrReports]);
 
 
     const handlePrintClick = async (status: DispositionAction, list: ReturnRecord[]) => {
@@ -136,6 +147,8 @@ export const Step7Docs: React.FC<Step7DocsProps> = ({ onPrintDocs }) => {
     // Split items into main groups
     const ncrItems = React.useMemo(() => processedItems.filter(isNCRItem), [processedItems]);
     const colItems = React.useMemo(() => processedItems.filter(isCollectionItem), [processedItems]);
+    const ncrGroupCount = React.useMemo(() => new Set(ncrItems.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size, [ncrItems]);
+    const colGroupCount = React.useMemo(() => new Set(colItems.map(i => i.ncrNumber || i.collectionOrderId || i.id)).size, [colItems]);
 
     // Current Display List based on Tab
     const currentItems = activeTab === 'NCR' ? ncrItems : colItems;
@@ -165,7 +178,7 @@ export const Step7Docs: React.FC<Step7DocsProps> = ({ onPrintDocs }) => {
                         }`}
                 >
                     <AlertOctagon className="w-5 h-5" />
-                    รายการ NCR ({ncrItems.length})
+                    รายการ NCR ({ncrGroupCount})
                 </button>
                 <button
                     onClick={() => setActiveTab('COLLECTION')}
@@ -175,7 +188,7 @@ export const Step7Docs: React.FC<Step7DocsProps> = ({ onPrintDocs }) => {
                         }`}
                 >
                     <FileText className="w-5 h-5" />
-                    รายการ Collection ({colItems.length})
+                    รายการ Collection ({colGroupCount})
                 </button>
             </div>
 

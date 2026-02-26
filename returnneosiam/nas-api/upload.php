@@ -10,11 +10,11 @@
  */
 
 // ===== CONFIG — แก้ตรงนี้สำหรับโปรเจคใหม่ =====
-$API_KEY = 'neosiam-nas-2026-secret';
+$API_KEY = 'NAS_UPLOAD_KEY_sansan856';
 $UPLOAD_DIR = '/tmp/nas-uploads-ncr';
 $BASE_URL = 'https://neosiam.dscloud.biz/ncr-api/serve.php?file=';
 $MAX_FILE_SIZE = 10 * 1024 * 1024;               // 10MB
-$ALLOWED_TYPES = array('image/webp', 'image/jpeg', 'image/png', 'image/gif', 'application/pdf');
+$ALLOWED_TYPES = array('image/webp', 'image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'image/jpg');
 
 // ===== CORS — ต้องมีเสมอ =====
 header('Access-Control-Allow-Origin: *');
@@ -59,18 +59,31 @@ if ($file['size'] > $MAX_FILE_SIZE) {
     exit;
 }
 
-// MIME type check
+// MIME type check (robust for Synology DSM/libmagic)
 $mimeType = '';
 if (function_exists('finfo_open')) {
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mimeType = finfo_file($finfo, $file['tmp_name']);
-    finfo_close($finfo);
-} else {
-    $mimeType = $file['type'];
+    // Suppress warnings on some DSM builds
+    $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+    if ($finfo) {
+        $detected = @finfo_file($finfo, $file['tmp_name']);
+        @finfo_close($finfo);
+        $mimeType = $detected !== false ? $detected : '';
+    }
+}
+
+// Fallback to client-declared type if finfo is empty/unknown
+if (empty($mimeType) || $mimeType === 'application/octet-stream' || $mimeType === 'text/plain') {
+    $mimeType = isset($file['type']) ? $file['type'] : '';
 }
 
 if (!in_array($mimeType, $ALLOWED_TYPES)) {
-    echo json_encode(array('success' => false, 'error' => 'File type not allowed', 'type' => $mimeType));
+    echo json_encode(array(
+        'success' => false,
+        'error' => 'File type not allowed',
+        'detected_type' => $mimeType,
+        'frontend_type' => isset($file['type']) ? $file['type'] : null,
+        'filename' => isset($file['name']) ? $file['name'] : null
+    ));
     exit;
 }
 
